@@ -10,8 +10,16 @@ import {
   terminalWindowPresentation,
 } from "@/modules/terminal/ghostty/windowPresentation";
 import { useWorkspaceEnvStore } from "@/modules/workspace";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 function useDirectory(
   path: string | null,
@@ -216,6 +224,87 @@ function FileGlyph({ kind }: { kind: string }) {
   );
 }
 
+function FileColumn({
+  entries,
+  base,
+  side,
+  children,
+}: {
+  entries: DirEntry[];
+  base: string | null;
+  side: string;
+  children: (
+    entry: DirEntry,
+    index: number,
+    moveFocus: (index: number) => void,
+  ) => ReactNode;
+}) {
+  "use no memo";
+  const scroll = useRef<HTMLFieldSetElement>(null);
+  const pendingFocus = useRef<number | null>(null);
+  const virtualizer = useVirtualizer<HTMLFieldSetElement, HTMLDivElement>({
+    count: entries.length,
+    getScrollElement: () => scroll.current,
+    estimateSize: () => 20,
+    overscan: 8,
+    getItemKey: (index) => `${base}/${entries[index].name}`,
+  });
+  const completeFocus = () => {
+    const index = pendingFocus.current;
+    if (index === null) return;
+    const button = scroll.current?.querySelector<HTMLButtonElement>(
+      `[data-index="${index}"] button`,
+    );
+    if (button) {
+      pendingFocus.current = null;
+      button.focus();
+    }
+  };
+  useLayoutEffect(completeFocus);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new directory must reset its scroll position.
+  useLayoutEffect(() => {
+    if (scroll.current) scroll.current.scrollTop = 0;
+  }, [base]);
+  const moveFocus = (index: number) => {
+    const next = Math.max(0, Math.min(entries.length - 1, index));
+    pendingFocus.current = next;
+    virtualizer.scrollToIndex(next, { align: "auto" });
+    completeFocus();
+  };
+  return (
+    <fieldset
+      ref={scroll}
+      className={`terex-file-column terex-file-column-${side}`}
+      aria-label={`${side} directory`}
+    >
+      <div
+        style={{
+          height: virtualizer.getTotalSize(),
+          position: "relative",
+          width: "100%",
+        }}
+      >
+        {virtualizer.getVirtualItems().map((row) => (
+          <div
+            key={row.key}
+            data-index={row.index}
+            ref={virtualizer.measureElement}
+            style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              width: "100%",
+              transform: `translateY(${row.start}px)`,
+            }}
+          >
+            {children(entries[row.index], row.index, moveFocus)}
+          </div>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
 export function Commander({ files }: { files: DesktopFiles }) {
   const { path, current, parent, selected, preview } = files;
   const [highlight, setHighlight] = useState<{
@@ -228,11 +317,8 @@ export function Commander({ files }: { files: DesktopFiles }) {
     side: "parent" | "current" | "preview",
   ) {
     return (
-      <fieldset
-        className={`terex-file-column terex-file-column-${side}`}
-        aria-label={`${side} directory`}
-      >
-        {entries.map((entry) => (
+      <FileColumn entries={entries} base={base} side={side}>
+        {(entry, index, moveFocus) => (
           <button
             type="button"
             key={entry.name}
@@ -256,16 +342,11 @@ export function Commander({ files }: { files: DesktopFiles }) {
               }
               if (event.key === "ArrowDown") {
                 event.preventDefault();
-                (
-                  event.currentTarget.nextElementSibling as HTMLElement | null
-                )?.focus();
+                moveFocus(index + 1);
               }
               if (event.key === "ArrowUp") {
                 event.preventDefault();
-                (
-                  event.currentTarget
-                    .previousElementSibling as HTMLElement | null
-                )?.focus();
+                moveFocus(index - 1);
               }
             }}
           >
@@ -281,8 +362,8 @@ export function Commander({ files }: { files: DesktopFiles }) {
               {entry.kind === "dir" ? "/" : bytes(entry.size)}
             </span>
           </button>
-        ))}
-      </fieldset>
+        )}
+      </FileColumn>
     );
   }
   return (

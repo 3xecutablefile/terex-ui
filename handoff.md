@@ -17,7 +17,15 @@ Fork crynta/terax-ai as terex-ui. Match the supplied eDEX reference: charcoal ba
 - Native checks: cargo test --manifest-path src-tauri/Cargo.toml --locked; cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings.
 
 ## State
-Public repository verified. Commit `841cf57` published the full app and release automation. The initial release built all four targets successfully: https://github.com/3xecutablefile/terex-ui/releases/tag/build-1-1 (run 37634415566). Commit `067b898` published the verified Files/terminal synchronization, duplicate-explorer removal, app context menu, and background-work reductions. Local keychain-backed pushes did not queue Actions runs despite active workflows, so push triggering is being checked using the authenticated GitHub CLI credential helper. Checks must remain headless; no subagents.
+Performance follow-up implemented and verified locally after the user reported lag in typing, scrolling, and tab/folder switching. The user has now explicitly requested pushing these fixes. The sampled app PID 8244 was the unoptimized debug bundle. Idle host CPU samples were 0.0-0.6%; nearby WebKit WebContent/GPU processes peaked at 1.5%/1.2% in the short idle sample. macOS reported no swap and 47% memory availability, so memory exhaustion is not established. No live interaction trace or battery benchmark has been captured. Checks must remain headless; no subagents.
+
+## Current Lag Fixes
+- Confirmed a visibility mismatch: Files hid workspace CSS while TerminalStack still marked its active renderer visible. Added a presentation context so all workspace stacks become inactive while Files is displayed, preserving mounted sessions/buffers.
+- New three-column file view previously mounted every entry. It now uses the existing TanStack virtualizer, measuring row heights and preserving arrow-key focus.
+- Native fs_read_dir was synchronous on the command path. It now delegates enumeration to spawn_blocking; the existing sync implementation and a new async-command test preserve behavior.
+- Optimized release build succeeded: `src-tauri/target/release/bundle/macos/Terex UI.app`, 9.27 MiB (versus approximately 75 MiB for the debug bundle). Prefer this release path for the next requested launch. It has not been opened yet; do not claim native interactive latency has been re-measured.
+- All 1,214 frontend tests passed. Native fs_search tests (26, including the async-command regression) and all-targets clippy passed. Development and production-root headless checks passed; the 10,000-entry fixture mounted 33 rows, scrolling reached the last entry, arrow focus worked, and diagnostics confirmed terminal presentation is inactive in Files.
+- Both existing GitHub releases succeeded on all four targets: build-1-1 and build-2-1. The latter includes commit 305acdd. GitHub records user pushes but has not enqueued on-push runs; explicit dispatch works. Do not claim the push trigger was observed working.
 
 ## Current Follow-up
 - Removed FileTiles/bottom explorer. FileActions toolbar is inside Files; keyboard spans the lower area. The Files view names the actual active terminal directory rather than a hardcoded terminal label.

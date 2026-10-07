@@ -1,11 +1,12 @@
-import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
+import { WorkspaceVisibility } from "@/lib/workspaceVisibility";
 import { AiDiffStack, EditorStack, GitDiffStack } from "@/modules/editor";
 import { GitHistoryStack } from "@/modules/git-history";
 import { MarkdownStack } from "@/modules/markdown";
 import { PreviewStack } from "@/modules/preview";
 import type { Tab } from "@/modules/tabs";
 import { TerminalStack } from "@/modules/terminal";
+import { type ComponentProps, useContext } from "react";
 
 type TerminalStackProps = ComponentProps<typeof TerminalStack>;
 type EditorStackProps = ComponentProps<typeof EditorStack>;
@@ -64,7 +65,9 @@ export function WorkspaceSurface({
   onGitHistorySearchHandle,
   onSetMarkdownView,
 }: Props) {
-  const kind = activeTab?.kind;
+  const visible = useContext(WorkspaceVisibility);
+  const presentedId = visible ? activeId : -1;
+  const kind = visible ? activeTab?.kind : undefined;
   const isTerminalTab = kind === "terminal";
   const isEditorTab = kind === "editor";
   const isPreviewTab = kind === "preview";
@@ -85,7 +88,7 @@ export function WorkspaceSurface({
       >
         <TerminalStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           registerHandle={registerTerminalHandle}
           onSearchReady={onSearchReady}
           onCwd={onCwd}
@@ -99,7 +102,7 @@ export function WorkspaceSurface({
       >
         <EditorStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           registerHandle={registerEditorHandle}
           onDirtyChange={onEditorDirtyChange}
           onCloseTab={onEditorCloseTab}
@@ -112,7 +115,7 @@ export function WorkspaceSurface({
       >
         <PreviewStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           registerHandle={registerPreviewHandle}
           onUrlChange={onPreviewUrlChange}
         />
@@ -123,7 +126,7 @@ export function WorkspaceSurface({
       >
         <MarkdownStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           onSetMarkdownView={onSetMarkdownView}
         />
       </div>
@@ -133,7 +136,7 @@ export function WorkspaceSurface({
       >
         <AiDiffStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           onAccept={onAiDiffAccept}
           onReject={onAiDiffReject}
         />
@@ -142,7 +145,7 @@ export function WorkspaceSurface({
         className={cn(LAYER, !isGitDiffTab && "invisible pointer-events-none")}
         aria-hidden={!isGitDiffTab}
       >
-        <GitDiffStack tabs={tabs} activeId={activeId} />
+        <GitDiffStack tabs={tabs} activeId={presentedId} />
       </div>
       <div
         className={cn(
@@ -153,7 +156,7 @@ export function WorkspaceSurface({
       >
         <GitHistoryStack
           tabs={tabs}
-          activeId={activeId}
+          activeId={presentedId}
           onOpenCommitFile={onOpenCommitFile}
           onSearchHandle={onGitHistorySearchHandle}
         />

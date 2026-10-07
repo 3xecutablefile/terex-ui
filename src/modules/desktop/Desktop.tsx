@@ -6,6 +6,7 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { IS_MAC } from "@/lib/platform";
+import { WorkspaceVisibility } from "@/lib/workspaceVisibility";
 import {
   Commander,
   FileActions,
@@ -159,7 +160,9 @@ export function Desktop(props: Props) {
                 className="terex-workspace-content"
                 inert={fileMode && !props.zen}
               >
-                {props.children}
+                <WorkspaceVisibility.Provider value={!fileMode || props.zen}>
+                  {props.children}
+                </WorkspaceVisibility.Provider>
               </div>
               {fileMode && !props.zen && (
                 <div className="terex-browser-surface">

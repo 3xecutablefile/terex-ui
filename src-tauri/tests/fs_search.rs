@@ -3,7 +3,18 @@ mod common;
 use common::{git_available, FsFixture, GitRepoFixture};
 use terax_lib::modules::fs::grep::{fs_glob, fs_grep};
 use terax_lib::modules::fs::search::{fs_list_files, fs_search};
-use terax_lib::modules::fs::tree::{fs_read_dir, list_subdirs, EntryKind};
+use terax_lib::modules::fs::tree::{read_dir_sync as fs_read_dir, list_subdirs, EntryKind};
+
+#[test]
+fn async_directory_command_matches_native_listing() {
+    let fx = FsFixture::new();
+    fx.write("example.txt", "example");
+    let entries = tauri::async_runtime::block_on(
+        terax_lib::modules::fs::tree::fs_read_dir(fx.root_str(), false, None, None),
+    ).expect("async read_dir");
+    assert_eq!(entries.len(), 1);
+    assert_eq!(entries[0].name, "example.txt");
+}
 
 #[test]
 fn grep_finds_matches_and_returns_relative_paths() {

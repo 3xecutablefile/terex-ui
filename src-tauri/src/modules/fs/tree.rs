@@ -131,7 +131,20 @@ fn natural_cmp(a: &str, b: &str) -> Ordering {
 /// opts into the per-entry `gitignored` flag; off by default so non-explorer
 /// callers pay nothing.
 #[tauri::command]
-pub fn fs_read_dir(
+pub async fn fs_read_dir(
+    path: String,
+    show_hidden: bool,
+    git_decorations: Option<bool>,
+    workspace: Option<WorkspaceEnv>,
+) -> Result<Vec<DirEntry>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        read_dir_sync(path, show_hidden, git_decorations, workspace)
+    })
+    .await
+    .map_err(|error| error.to_string())?
+}
+
+pub fn read_dir_sync(
     path: String,
     show_hidden: bool,
     git_decorations: Option<bool>,
