@@ -17,7 +17,7 @@ Fork crynta/terax-ai as terex-ui. Match the supplied eDEX reference: charcoal ba
 - Native checks: cargo test --manifest-path src-tauri/Cargo.toml --locked; cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings.
 
 ## State
-Public repository verified. Commit `841cf57` published the full app and release automation. The initial fork workflow was enabled and manually dispatched; all four platform builds and release publishing passed: https://github.com/3xecutablefile/terex-ui/releases/tag/build-1-1 (run 37634415566). User then requested Files/terminal synchronization, removal of the duplicate bottom-left explorer, and lower battery use/app context menus. These follow-up changes are being verified for the next authorized push. Checks must remain headless; no subagents.
+Public repository verified. Commit `841cf57` published the full app and release automation. The initial release built all four targets successfully: https://github.com/3xecutablefile/terex-ui/releases/tag/build-1-1 (run 37634415566). Commit `067b898` published the verified Files/terminal synchronization, duplicate-explorer removal, app context menu, and background-work reductions. Local keychain-backed pushes did not queue Actions runs despite active workflows, so push triggering is being checked using the authenticated GitHub CLI credential helper. Checks must remain headless; no subagents.
 
 ## Current Follow-up
 - Removed FileTiles/bottom explorer. FileActions toolbar is inside Files; keyboard spans the lower area. The Files view names the actual active terminal directory rather than a hardcoded terminal label.
