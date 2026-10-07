@@ -30,6 +30,7 @@ import {
 import { AiComposerProvider } from "@/modules/ai/lib/composer";
 import { native } from "@/modules/ai/lib/native";
 import { CommandPalette, createCommandItems } from "@/modules/command-palette";
+import { Desktop } from "@/modules/desktop/Desktop";
 import { useControlBridge } from "@/modules/control";
 import {
   type EditorPaneHandle,
@@ -1382,6 +1383,26 @@ export default function App() {
     <ThemeProvider>
       <TooltipProvider>
         <div className="relative flex h-screen flex-col overflow-hidden bg-frame text-foreground">
+          <Desktop
+            cwd={explorerRoot}
+            activeId={activeId}
+            ready={booted}
+            terminalActive={isTerminalTab}
+            zen={zenMode}
+            aiOpen={panelOpen}
+            onInput={(value) => {
+              if (activeLeafId !== null) {
+                writeToSession(activeLeafId, value);
+                terminalRefs.current.get(activeLeafId)?.focus();
+              }
+            }}
+            onOpenFile={(path) => handleOpenFile(path, true)}
+            onTerminal={(path) => newTab(path)}
+            onAi={togglePanelAndFocus}
+            onAttach={handleAttachFileToAgent}
+            onSettings={() => void openSettingsWindow()}
+            onCommands={() => openCommandPalette("commands")}
+          >
           {!zenMode && (
             <Header
               tabs={spaceTabs}
@@ -1546,6 +1567,7 @@ export default function App() {
             />
           )}
 
+          </Desktop>
           <WindowVibrancyBridge />
 
           <AgentNotificationsBridge

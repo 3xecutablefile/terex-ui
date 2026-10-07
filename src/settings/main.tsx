@@ -1,4 +1,5 @@
 import "../styles/globals.css";
+import "@/styles/desktop.css";
 
 import { USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
 import { ThemeProvider } from "@/modules/theme";

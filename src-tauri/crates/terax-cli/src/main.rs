@@ -103,7 +103,7 @@ fn run(args: Vec<OsString>) -> Result<(), CliError> {
                 let error = response.error.unwrap_or_else(|| {
                     terax_control_protocol::ControlError::new(
                         "request_failed",
-                        "Terax rejected the request",
+                        "Terex UI rejected the request",
                     )
                 });
                 return Err(CliError::new(error.code, error.message, EXIT_REQUEST));
@@ -237,7 +237,7 @@ fn parse_open(args: Vec<OsString>) -> Result<Action, CliError> {
     let path = canonical.into_os_string().into_string().map_err(|_| {
         CliError::new(
             "non_utf8_path",
-            "Terax cannot open a path that is not valid UTF-8",
+            "Terex UI cannot open a path that is not valid UTF-8",
             EXIT_USAGE,
         )
     })?;
@@ -291,14 +291,14 @@ fn load_endpoint() -> Result<ControlDescriptor, CliError> {
             let bytes = std::fs::read(&path).map_err(|_| {
                 CliError::new(
                     "app_unavailable",
-                    "Terax is not running; start the app and try again",
+                    "Terex UI is not running; start the app and try again",
                     EXIT_UNAVAILABLE,
                 )
             })?;
             let descriptor = serde_json::from_slice(&bytes).map_err(|error| {
                 CliError::new(
                     "invalid_descriptor",
-                    format!("invalid Terax control descriptor: {error}"),
+                    format!("invalid Terex UI control descriptor: {error}"),
                     EXIT_PROTOCOL,
                 )
             })?;
@@ -323,7 +323,7 @@ fn validate_endpoint(
         return Err(CliError::new(
             "unsupported_protocol",
             format!(
-                "Terax uses control protocol {}, but this CLI supports {PROTOCOL_VERSION}",
+                "Terex UI uses control protocol {}, but this CLI supports {PROTOCOL_VERSION}",
                 descriptor.protocol
             ),
             EXIT_PROTOCOL,
@@ -337,7 +337,7 @@ fn validate_endpoint(
     {
         return Err(CliError::new(
             "invalid_endpoint",
-            "Terax control token is invalid",
+            "Terex UI control token is invalid",
             EXIT_PROTOCOL,
         ));
     }
@@ -345,7 +345,7 @@ fn validate_endpoint(
     if require_live_process && !process_is_alive(descriptor.pid) {
         return Err(CliError::new(
             "invalid_endpoint",
-            "Terax control process is not running",
+            "Terex UI control process is not running",
             EXIT_PROTOCOL,
         ));
     }
@@ -404,14 +404,14 @@ fn parse_loopback_address(address: &str) -> Result<SocketAddr, CliError> {
     let address: SocketAddr = address.parse().map_err(|error| {
         CliError::new(
             "invalid_endpoint",
-            format!("invalid Terax control address: {error}"),
+            format!("invalid Terex UI control address: {error}"),
             EXIT_PROTOCOL,
         )
     })?;
     if !address.ip().is_loopback() {
         return Err(CliError::new(
             "invalid_endpoint",
-            "Terax control address must be loopback-only",
+            "Terex UI control address must be loopback-only",
             EXIT_PROTOCOL,
         ));
     }
@@ -443,21 +443,21 @@ fn read_response(
     if bytes.len() > MAX_MESSAGE_BYTES {
         return Err(CliError::new(
             "message_too_large",
-            "Terax response exceeded the protocol limit",
+            "Terex UI response exceeded the protocol limit",
             EXIT_PROTOCOL,
         ));
     }
     if bytes.last() != Some(&b'\n') {
         return Err(CliError::new(
             "invalid_response",
-            "Terax returned an incomplete response",
+            "Terex UI returned an incomplete response",
             EXIT_PROTOCOL,
         ));
     }
     let response: ControlResponse = serde_json::from_slice(&bytes).map_err(|error| {
         CliError::new(
             "invalid_response",
-            format!("Terax returned invalid JSON: {error}"),
+            format!("Terex UI returned invalid JSON: {error}"),
             EXIT_PROTOCOL,
         )
     })?;
@@ -466,7 +466,7 @@ fn read_response(
     if response.protocol != PROTOCOL_VERSION || !matched_id {
         return Err(CliError::new(
             "invalid_response",
-            "Terax returned a mismatched protocol version or request id",
+            "Terex UI returned a mismatched protocol version or request id",
             EXIT_PROTOCOL,
         ));
     }
@@ -501,7 +501,7 @@ fn print_result(method: &str, result: Value, as_json: bool) {
                 .get("app_version")
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
-            println!("Terax {version} is running");
+            println!("Terex UI {version} is running");
         }
         METHOD_CAPABILITIES => {
             if let Some(methods) = result.get("methods").and_then(Value::as_array) {
@@ -540,9 +540,9 @@ fn print_result(method: &str, result: Value, as_json: bool) {
 
 fn print_help() {
     println!(
-        "Terax command line interface\n\n\
+        "Terex UI command line interface\n\n\
 Usage:\n  terax <file> [--line <n>] [--no-focus] [--json]\n  terax open <file> [--line <n>] [--no-focus] [--json]\n  terax ping [--json]\n  terax capabilities [--json]\n  terax identify [--json]\n  terax --version\n\n\
-The app must be running. Commands launched in a Terax pane target that pane's space."
+The app must be running. Commands launched in a Terex UI pane target that pane's space."
     );
 }
 

@@ -1,0 +1,166 @@
+:root, .dark {
+  --terex-bg: var(--background);
+  --terex-blue: var(--primary);
+  --terex-bright: var(--foreground);
+  --terex-dim: var(--muted-foreground);
+  --terex-line: var(--border);
+  --background: #24212c;
+  --foreground: #c7a6f5;
+  --frame: var(--background);
+  --card: #2c2636;
+  --card-foreground: #c7a6f5;
+  --popover: #292332;
+  --popover-foreground: #dbc3fb;
+  --primary: #b78aef;
+  --primary-foreground: #201b29;
+  --secondary: #322940;
+  --secondary-foreground: #d2b5f7;
+  --muted: #30283a;
+  --muted-foreground: #a28bb8;
+  --accent: #9856df;
+  --accent-foreground: #171220;
+  --border: #536d3d;
+  --input: #78579d;
+  --ring: #a5e84c;
+  --sidebar: var(--background);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  --radius: 2px;
+  --pane-radius: 0px;
+  --terminal-background: var(--background);
+  --terminal-foreground: var(--foreground);
+  --terminal-cursor: var(--ring);
+  --terminal-cursor-accent: var(--background);
+  --terminal-selection: var(--accent);
+  --terminal-ansi-blue: #a581df;
+  --terminal-ansi-bright-blue: #c7a6f5;
+  --terminal-ansi-cyan: #a5e84c;
+  --terminal-ansi-bright-cyan: #c2f189;
+  --font-sans: "JetBrains Mono", monospace;
+}
+.terex-desktop {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
+  overflow: hidden;
+  background: var(--terex-bg);
+  color: var(--terex-blue);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  --rail-width: clamp(145px, 15.6vw, 260px);
+}
+.terex-desktop button { cursor: pointer; transition: background-color 120ms, color 120ms; }
+.terex-desktop button:disabled { cursor: default; opacity: .4; }
+.terex-desktop button:focus-visible { outline: 1px solid var(--ring); outline-offset: -1px; }
+.terex-topline { display:flex; align-items:center; gap:16px; min-height:30px; border-top:2px solid var(--terex-line); font-size:9px; letter-spacing:.08em; flex-shrink:0; }
+.terex-topline.has-native-controls { padding-left:76px; }
+.terex-topline strong { color:var(--terex-bright); font-size:11px; letter-spacing:.16em; }
+.terex-topline-subtitle { color:var(--terex-dim); }
+.terex-topline nav { display:flex; align-items:center; gap:3px; margin-left:auto; }
+.terex-topline nav button { min-height:26px; padding:0 9px; }
+.terex-topline nav button:hover, .terex-topline nav button[aria-pressed=true] { background:var(--accent); color:var(--accent-foreground); }
+.terex-native-status { display:flex; align-items:center; gap:6px; font-size:8px; white-space:nowrap; }
+.terex-native-status i { width:4px; height:4px; background:var(--ring); box-shadow:0 0 5px var(--ring); }
+.terex-top-deck { min-height:0; display:grid; grid-template-columns:var(--rail-width) minmax(0,1fr) var(--rail-width); gap:14px; flex:1; }
+.terex-system-rail, .terex-network-rail { min-height:0; overflow:hidden; display:flex; flex-direction:column; }
+.terex-rule { border-top:1px solid var(--terex-line); display:flex; gap:6px; align-items:center; justify-content:space-between; flex-shrink:0; min-height:19px; font-size:9px; line-height:1.1; letter-spacing:.015em; }
+.terex-rule span:last-child { font-size:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; text-align:right; color:var(--terex-dim); }
+.terex-clock { font-size:clamp(24px,2.65vw,43px); letter-spacing:.045em; line-height:1.5; text-align:center; color:var(--terex-blue); font-variant-numeric:tabular-nums; }
+.terex-date { font-size:8px; letter-spacing:.04em; text-align:center; padding-bottom:7px; color:var(--terex-dim); }
+.terex-machine-summary { display:flex; justify-content:space-between; gap:4px; border-top:1px solid var(--terex-line); padding:6px 0; margin:0; }
+.terex-machine-summary dt { font-size:8px; color:var(--terex-dim); }
+.terex-machine-summary dd { font-size:9px; color:var(--terex-blue); margin:2px 0 0; }
+.terex-hardware { display:flex; flex-direction:column; text-align:center; gap:2px; padding:7px 2px; border-top:1px solid var(--terex-line); font-size:8px; color:var(--terex-dim); }
+.terex-hardware strong { color:var(--terex-blue); font-weight:400; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.terex-graph-caption { display:flex; justify-content:space-between; font-size:8px; color:var(--terex-dim); }
+.terex-chart { width:100%; height:62px; flex-shrink:0; color:var(--terex-blue); }
+.terex-chart-grid { stroke:var(--terex-line); stroke-width:.5; fill:none; stroke-dasharray:1 3; }
+.terex-core-bars { display:flex; gap:3px; height:33px; padding-top:6px; margin-bottom:5px; }
+.terex-core-bars>div { display:flex; flex:1; align-items:flex-end; border-bottom:1px solid var(--terex-line); background:repeating-linear-gradient(to top, transparent 0 7px, color-mix(in srgb, var(--border) 30%, transparent) 7px 8px); }
+.terex-core-bars i { display:block; width:100%; background:var(--terex-blue); min-height:2px; max-height:100%; }
+.terex-memory-map { display:grid; grid-template-columns:repeat(20,1fr); gap:3px; flex:1; min-height:28px; max-height:92px; padding:4px 0 7px; }
+.terex-memory-map i { display:block; min-height:1px; background:var(--terex-line); opacity:.5; }
+.terex-memory-map i.used { background:var(--terex-blue); opacity:.95; }
+.terex-meter { height:5px; border:1px solid var(--terex-line); margin-bottom:8px; }
+.terex-meter i { display:block; height:100%; background:var(--terex-blue); }
+.terex-processes { font-size:8px; table-layout:fixed; width:100%; text-align:left; border-collapse:collapse; }
+.terex-processes th { font-weight:400; color:var(--terex-dim); }
+.terex-processes th:first-child { width:27%; }.terex-processes th:last-child { width:27%;text-align:right; }
+.terex-processes td { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.65; }.terex-processes td:last-child{text-align:right;}
+.terex-network-rail>.terex-rule:first-child { margin-bottom:22px; }
+.terex-network-status { margin:0 0 12px; font-size:9px; }
+.terex-network-status>div { display:flex;justify-content:space-between;gap:5px; }
+.terex-network-status dt { color:var(--terex-dim); }.terex-network-status dd{margin:0;text-align:right;}
+.terex-globe-wrap { display:flex; flex-direction:column; min-height:120px; flex:1; overflow:hidden; }
+.terex-globe { width:100%; flex:1; min-height:0; color:var(--terex-blue); }
+.terex-globe-caption { text-align:center;font-size:7px;color:var(--terex-dim);padding-bottom:15px; }
+.terex-traffic-summary { display:flex; justify-content:space-between; font-size:8px; margin:4px 0; }
+.terex-network-rail .terex-chart { height:115px; }
+.terex-transfer-total { display:flex;justify-content:space-between;flex-wrap:wrap;font-size:7px;padding:5px 0 0;color:var(--terex-dim); }
+.terex-workspace { position:relative; display:flex;flex-direction:column;min-width:0;min-height:0; border:1px solid var(--terex-line); margin-top:5px; }
+.terex-workspace-content { display:flex;flex-direction:column;height:100%;min-height:0;position:relative;isolation:isolate;z-index:0; }
+.terex-workspace[data-file-mode=true] .terex-workspace-content { visibility:hidden;pointer-events:none;opacity:0; }
+.terex-workspace-content>main { min-height:0;flex:1; }
+.terex-browser-surface { position:absolute;inset:0;display:flex;flex-direction:column;background:var(--terex-bg);z-index:1; }
+.terex-browser-tabs { display:flex; flex-shrink:0;height:24px;margin:-1px -1px 0; }
+.terex-browser-tabs button { flex:1; min-width:0; font-size:10px; white-space:nowrap; border:1px solid var(--terex-line); color:var(--terex-dim); clip-path:polygon(0 0,calc(100% - 12px) 0,100% 100%,0 100%); }
+.terex-browser-tabs button.selected { color:var(--primary-foreground);background:var(--primary);border-color:var(--ring);font-weight:700; }
+.terex-browser-tabs button:hover { color:var(--accent-foreground);background:var(--accent); }.terex-browser-tabs button.selected:hover{color:var(--primary-foreground);background:var(--terex-bright);}
+.terex-commander { display:flex;flex-direction:column;min-height:0;flex:1; }
+.terex-pathline { min-height:26px;display:flex;align-items:center;gap:8px;padding:0 8px;color:var(--terex-bright);font-size:11px;border-bottom:1px solid var(--terex-line); }
+.terex-pathline>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.terex-path-user{color:var(--terex-blue);font-weight:700;}.terex-pathline button{margin-left:auto;padding:0 5px;font-size:17px;}
+.terex-columns { display:grid; grid-template-columns:25% 29% 46%; flex:1;min-height:0; padding:8px 6px 0; }
+.terex-file-column { min-width:0;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--terex-blue) transparent;border-right:1px solid var(--terex-dim);padding:0 3px 3px; }
+.terex-file-column-preview { border-right:0; }.terex-file-column-parent{padding-left:0;}
+.terex-file-row { width:100%;min-height:20px;display:flex;align-items:center;gap:5px;text-align:left;font-size:11px;line-height:1.3;color:var(--muted-foreground); }
+.terex-file-row.is-directory { color:var(--terex-bright);font-weight:700; }.terex-file-row:hover{background:var(--muted);}.terex-file-row.selected{background:var(--primary);color:var(--primary-foreground);}
+.terex-file-mark{font-size:10px;flex-shrink:0;}.terex-file-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.terex-file-size{margin-left:auto;padding-right:3px;font-size:9px;flex-shrink:0;}
+.terex-file-detail{display:flex;align-items:center;justify-content:center;gap:15px;flex-direction:column;padding:16px;text-align:center;font-size:11px;min-width:0;overflow:auto;color:var(--terex-dim);}
+.terex-file-detail svg{width:44px;height:44px;opacity:.75;}.terex-file-detail strong{color:var(--terex-bright);overflow-wrap:anywhere;}.terex-file-detail button{border:1px solid var(--terex-line);padding:8px;color:var(--terex-bright);}
+.terex-file-footer{height:22px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:0 7px;font-size:9px;color:var(--terex-dim);border-top:1px solid var(--terex-line);overflow:hidden;gap:10px;}.terex-file-footer>span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.terex-bottom-deck { display:grid; grid-template-columns:44% minmax(0,1fr);gap:24px;height:30vh;min-height:190px;max-height:330px;padding-top:18px;flex-shrink:0; }
+.terex-filesystem { min-width:0;min-height:0;display:flex;flex-direction:column; }
+.terex-tiles { display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));grid-auto-rows:72px;overflow:auto;scrollbar-width:thin;scrollbar-color:var(--terex-blue) transparent;min-height:0;flex:1;padding:3px 0; }
+.terex-tile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-width:0;color:var(--terex-blue);}.terex-tile svg{width:34px;height:34px;}.terex-tile>span:last-child{font-size:8px;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;}.terex-tile:hover,.terex-tile[aria-pressed=true]{background:var(--muted);color:var(--ring);}
+.terex-action-glyph {font-size:37px;line-height:34px;height:34px;}
+.terex-file-tools {display:flex;align-items:center;justify-content:space-between;border-top:2px solid var(--terex-line);min-height:24px;gap:8px;flex-shrink:0;font-size:8px;}.terex-file-tools button:hover{color:var(--terex-bright);}
+.terex-keyboard {display:flex;flex-direction:column;min-width:0;min-height:0;gap:4px;}.terex-keyboard>.terex-rule{border-color:transparent;min-height:12px;font-size:8px;}
+.terex-key-row {display:flex;flex:1;gap:3px;min-height:0;}
+.terex-key {display:flex;align-items:center;justify-content:center;flex:1;min-width:0;min-height:28px;font-size:clamp(10px,1vw,16px);font-weight:700;color:var(--terex-blue);border:1px solid transparent;}
+.terex-key-wide{flex:1.5;font-size:10px;}.terex-key-enter{border-color:var(--terex-line);flex:2;}.terex-key-space{flex:7;border-color:var(--terex-line);margin:3px 6px;}.terex-key:hover,.terex-key[aria-pressed=true]{background:var(--terex-blue);color:var(--terex-bg);border-color:var(--terex-bright);}
+.terex-footer {height:20px;flex-shrink:0;display:flex;align-items:center;gap:24px;color:var(--terex-dim);font-size:8px;border-bottom:2px solid var(--terex-line);}.terex-footer>span:nth-child(3){margin-left:auto;}
+.terex-error{color:#e99a90;font-size:10px;padding:6px;overflow-wrap:anywhere;}
+.terex-native-header{padding-left:5px!important;height:32px!important;gap:3px!important;}.terex-native-header button{border-radius:0!important;}.terex-workspace .terax-pane{border:0;box-shadow:none;border-radius:0;}.terex-workspace [role=tab]{border-radius:0;}.terex-workspace-content>main>div{padding:0;}
+.terex-desktop.is-zen {padding:0;}.terex-desktop.is-zen .terex-topline{display:none;}.terex-desktop.is-zen .terex-top-deck{display:flex;}.terex-desktop.is-zen .terex-workspace{flex:1;margin:0;border:0;}
+@media(min-width:1800px){.terex-file-row{font-size:13px;min-height:23px;}.terex-processes{font-size:10px;}.terex-rule{font-size:11px;min-height:23px;}.terex-rule span:last-child{font-size:9px;}.terex-tiles{grid-template-columns:repeat(auto-fill,minmax(94px,1fr));grid-auto-rows:85px;}.terex-tile svg{width:39px;height:39px;}.terex-tile>span:last-child{font-size:10px;}}
+@media(max-width:1100px){.terex-desktop{padding:0 7px;--rail-width:145px;}.terex-top-deck{gap:8px;}.terex-topline-subtitle,.terex-native-status{display:none;}.terex-topline{gap:8px;}.terex-bottom-deck{gap:12px;}.terex-rule{font-size:8px;}.terex-file-row{font-size:10px;}.terex-file-size{display:none;}.terex-key-wide{font-size:8px;}.terex-tiles{grid-template-columns:repeat(auto-fill,minmax(62px,1fr));}.terex-file-tools{font-size:7px;gap:4px;}}
+@media(max-width:850px){.terex-desktop{--rail-width:15.6vw;}.terex-top-deck{gap:8px;}.terex-topline nav button{padding:0 5px;font-size:8px;}.terex-topline strong{font-size:9px;}.terex-file-tools button:nth-child(3){display:none;}.terex-file-row{font-size:8px;min-height:14px;gap:3px;}.terex-columns{grid-template-columns:25% 30% 45%;padding:4px 3px 0;}.terex-pathline{font-size:8px;min-height:20px;}.terex-rule{font-size:7px;}.terex-rule span:last-child{font-size:6px;}.terex-machine-summary dd,.terex-network-status{font-size:7px;}.terex-hardware{font-size:6px;}.terex-clock{font-size:22px;}.terex-date{font-size:6px;}.terex-browser-tabs button{font-size:8px;}.terex-footer{font-size:7px;gap:8px;}}
+@media(max-width:600px){.terex-top-deck{display:flex;}.terex-system-rail,.terex-network-rail{display:none;}.terex-workspace{flex:1;}.terex-topline nav button:nth-last-child(2){display:none;}.terex-topline.has-native-controls{padding-left:70px;}.terex-topline strong{display:none;}.terex-bottom-deck{grid-template-columns:1fr;height:24vh;min-height:140px;padding-top:8px;}.terex-keyboard{display:none;}.terex-filesystem{width:100%;}.terex-footer>span:nth-child(3){display:none;}.terex-tiles{grid-auto-rows:62px;}.terex-browser-tabs button{font-size:8px;}.terex-columns{grid-template-columns:40% 60%;}.terex-file-column-parent{display:none;}.terex-file-row{font-size:11px;min-height:24px;}.terex-file-detail{font-size:10px;}.terex-file-tools button:nth-child(3){display:block;}}
+@media(max-height:650px){.terex-bottom-deck{height:28vh;min-height:135px;padding-top:9px;}.terex-tiles{grid-auto-rows:56px;}.terex-tile svg{width:27px;height:27px;}.terex-tile{gap:2px;}.terex-rule{min-height:15px;}.terex-hardware{padding:4px 0;}.terex-clock{line-height:1.2;}.terex-memory-map{gap:2px;min-height:20px;max-height:40px;}.terex-core-bars{height:21px;}.terex-chart{height:38px;}.terex-network-rail .terex-chart{height:65px;}.terex-processes{font-size:7px;}.terex-keyboard>.terex-rule{display:none;}.terex-key{min-height:18px;}.terex-keyboard,.terex-key-row{gap:1px;}}
+@media(prefers-reduced-motion:reduce){.terex-desktop *, .terex-desktop *::before, .terex-desktop *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important;}}
+@media(max-height:650px) and (min-width:601px){
+  .terex-bottom-deck{min-height:112px;height:28vh;padding-top:7px;}
+  .terex-footer{height:13px;font-size:6px;}
+  .terex-system-rail .terex-rule,.terex-network-rail .terex-rule{min-height:11px;font-size:6px;}
+  .terex-rule span:last-child{font-size:5.5px;}
+  .terex-clock{font-size:23px;line-height:1.15;}
+  .terex-date{font-size:5.5px;padding-bottom:3px;}
+  .terex-machine-summary{padding:2px 0;}.terex-machine-summary dt{font-size:5.5px;}.terex-machine-summary dd{font-size:6px;margin-top:0;}
+  .terex-hardware{font-size:5.5px;padding:3px 0;gap:0;}
+  .terex-graph-caption{font-size:5.5px;}
+  .terex-chart{height:23px;}.terex-core-bars{height:14px;padding-top:2px;margin-bottom:2px;}
+  .terex-memory-map{min-height:16px;max-height:25px;gap:1px;padding:2px 0;}.terex-meter{height:3px;margin-bottom:3px;}
+  .terex-processes{font-size:5.5px;}.terex-processes td{line-height:1.2;}
+  .terex-network-rail>.terex-rule:first-child{margin-bottom:10px;}.terex-network-status{margin-bottom:6px;font-size:6px;}
+  .terex-globe-wrap{min-height:70px;}.terex-globe-caption{font-size:4px;padding-bottom:7px;}.terex-network-rail .terex-chart{height:48px;}.terex-transfer-total{font-size:4px;}.terex-traffic-summary{font-size:5px;}
+  .terex-browser-tabs{height:17px;}.terex-pathline{min-height:18px;}.terex-file-footer{height:14px;font-size:6px;}.terex-file-row{min-height:12px;font-size:7px;}
+  .terex-tiles{grid-template-columns:repeat(auto-fill,minmax(43px,1fr));grid-auto-rows:38px;}.terex-tile svg{width:22px;height:22px;}.terex-tile>span:last-child{font-size:5px;}.terex-action-glyph{font-size:25px;height:22px;line-height:22px;}
+  .terex-filesystem>.terex-rule{min-height:11px;font-size:6px;}.terex-file-tools{min-height:17px;font-size:5px;}.terex-key{font-size:9px;}.terex-key-wide{font-size:6px;}
+}

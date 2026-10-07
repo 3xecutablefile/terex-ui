@@ -2,6 +2,7 @@ import { currentWorkspaceEnv } from "@/modules/workspace";
 import { invoke } from "@tauri-apps/api/core";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { appConfigDir, join } from "@tauri-apps/api/path";
+import { sharedConfigDirectory } from "@/lib/appData";
 import type { Theme } from "./types";
 import { validateTheme, type ValidationResult } from "./validateTheme";
 
@@ -17,7 +18,7 @@ export function isThemeFilePath(path: string): boolean {
 }
 
 async function themesDir(): Promise<string> {
-  return join(await appConfigDir(), "themes");
+  return join(sharedConfigDirectory ?? await appConfigDir(), "themes");
 }
 
 export async function themeFilePath(id: string): Promise<string> {

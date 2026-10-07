@@ -3,10 +3,10 @@ import { firePendingReviewForSession } from "@/modules/agents/lib/review";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
 import {
-  getAllCustomEndpointKeys,
-  getAllKeys,
-  hasAnyKey,
-} from "../lib/keyring";
+  endpointModelId,
+  endpointModels,
+} from "@/modules/ai/lib/endpointModels";
+import { getAllCustomEndpointKeys, getAllKeys } from "../lib/keyring";
 import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
@@ -21,7 +21,6 @@ export function useAiBootstrap(): {
   hasComposer: boolean;
   keysLoaded: boolean;
 } {
-  const apiKeys = useChatStore((s) => s.apiKeys);
   const setApiKeys = useChatStore((s) => s.setApiKeys);
   const setCustomEndpointKeys = useChatStore((s) => s.setCustomEndpointKeys);
   const setSelectedModelId = useChatStore((s) => s.setSelectedModelId);
@@ -32,29 +31,8 @@ export function useAiBootstrap(): {
     if (activeSessionId) firePendingReviewForSession(activeSessionId);
   }, [activeSessionId]);
 
-  const lmstudioModelId = usePreferencesStore((s) => s.lmstudioModelId);
-  const lmstudioBaseURL = usePreferencesStore((s) => s.lmstudioBaseURL);
-  const mlxModelId = usePreferencesStore((s) => s.mlxModelId);
-  const mlxBaseURL = usePreferencesStore((s) => s.mlxBaseURL);
-  const ollamaModelId = usePreferencesStore((s) => s.ollamaModelId);
-  const ollamaBaseURL = usePreferencesStore((s) => s.ollamaBaseURL);
-  const openaiCompatibleModelId = usePreferencesStore(
-    (s) => s.openaiCompatibleModelId,
-  );
-  const openaiCompatibleBaseURL = usePreferencesStore(
-    (s) => s.openaiCompatibleBaseURL,
-  );
   const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
-  const hasLocalModel =
-    (lmstudioBaseURL.trim().length > 0 && lmstudioModelId.trim().length > 0) ||
-    (mlxBaseURL.trim().length > 0 && mlxModelId.trim().length > 0) ||
-    (ollamaBaseURL.trim().length > 0 && ollamaModelId.trim().length > 0) ||
-    (openaiCompatibleBaseURL.trim().length > 0 &&
-      openaiCompatibleModelId.trim().length > 0) ||
-    customEndpoints.some(
-      (e) => e.baseURL.trim().length > 0 && e.modelId.trim().length > 0,
-    );
-  const hasComposer = hasAnyKey(apiKeys) || hasLocalModel;
+  const hasComposer = endpointModels(customEndpoints).length > 0;
 
   const prefsHydrated = usePreferencesStore((s) => s.hydrated);
   const [keysLoaded, setKeysLoaded] = useState(false);
@@ -67,9 +45,7 @@ export function useAiBootstrap(): {
         setKeysLoaded(true);
       });
       if (!prefsHydrated) return;
-      void getAllCustomEndpointKeys(
-        usePreferencesStore.getState().customEndpoints,
-      ).then((epKeys) => {
+      void getAllCustomEndpointKeys(customEndpoints).then((epKeys) => {
         if (!alive) return;
         setCustomEndpointKeys(epKeys);
       });
@@ -80,7 +56,7 @@ export function useAiBootstrap(): {
       alive = false;
       void unlistenP.then((fn) => fn());
     };
-  }, [setApiKeys, setCustomEndpointKeys, prefsHydrated]);
+  }, [setApiKeys, setCustomEndpointKeys, prefsHydrated, customEndpoints]);
 
   // Hydrate the cross-window preference store and mirror the default model
   // into chatStore so the dropdown reflects what the user picked in Settings.
@@ -91,8 +67,8 @@ export function useAiBootstrap(): {
   }, [initPrefs]);
   useEffect(() => {
     if (!prefsHydrated) return;
-    setSelectedModelId(prefDefaultModel);
-  }, [prefsHydrated, prefDefaultModel, setSelectedModelId]);
+    setSelectedModelId(endpointModelId(prefDefaultModel, customEndpoints));
+  }, [prefsHydrated, prefDefaultModel, customEndpoints, setSelectedModelId]);
 
   useEffect(() => {
     void hydrateSessions();

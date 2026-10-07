@@ -464,7 +464,7 @@ export const LANGUAGES: LanguageDefinition[] = [
       ),
   },
   {
-    name: "Terax Theme",
+    name: "Terex UI Theme",
     extensions: ["terax-theme"],
     loader: async () => {
       const [{ json }, { colorSwatches }] = await Promise.all([

@@ -361,7 +361,7 @@ export const EditorPane = memo(
                         ? s.openrouterModelId
                         : s.autocompleteModelId;
             return {
-              enabled: s.autocompleteEnabled,
+              enabled: s.autocompleteEnabled && !!compatEp?.baseURL.trim() && !!compatEp.modelId.trim(),
               trigger: s.autocompleteTrigger,
               provider: p,
               modelId,

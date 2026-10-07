@@ -17,20 +17,11 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
-import {
-  getBindingTokens,
-  SHORTCUTS,
-} from "@/modules/shortcuts/shortcuts";
+import { getBindingTokens, SHORTCUTS } from "@/modules/shortcuts/shortcuts";
 import {
   type CustomEndpoint,
   compatModelIdForEndpoint,
-  DEFAULT_MODEL_ID,
-  getAutocompleteEligibleModels,
-  getCompatModelInfo,
-  getModel,
   getProvider,
-  isCompatModelId,
-  MODELS,
   type ModelId,
   PROVIDERS,
   type ProviderId,
@@ -50,6 +41,10 @@ import {
   setKey,
 } from "@/modules/ai/lib/keyring";
 import { useChatStore } from "@/modules/ai/store/chatStore";
+import {
+  endpointModelId,
+  endpointModels,
+} from "@/modules/ai/lib/endpointModels";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import {
   type AutocompleteTrigger,
@@ -247,11 +242,7 @@ export function ModelsSection() {
     const remaining = customEndpoints.filter((e) => e.id !== id);
     const { selectedModelId, setSelectedModelId } = useChatStore.getState();
     if (selectedModelId === deadModelId) {
-      setSelectedModelId(
-        remaining[0]
-          ? compatModelIdForEndpoint(remaining[0].id)
-          : DEFAULT_MODEL_ID,
-      );
+      setSelectedModelId(endpointModelId("", remaining));
     }
 
     await setCustomEndpoints(remaining);
@@ -357,7 +348,7 @@ export function ModelsSection() {
     <div className="flex flex-col gap-7">
       <SectionHeader
         title="Models"
-        description="Connect the providers you use. Keys live in your OS keychain and are used only by Terax."
+        description="Chat and autocomplete list only configured custom endpoints. Your existing API keys remain in your OS keychain."
       />
 
       <DefaultsBlock
@@ -559,13 +550,17 @@ function DefaultsBlock({
 
 function DefaultModelPicker({
   defaultModel,
-  configuredIds,
 }: {
   defaultModel: ModelId;
   configuredIds: Set<ProviderId>;
 }) {
-  const m = getModel(defaultModel);
-  const hasAny = configuredIds.size > 0;
+  const customEndpoints = usePreferencesStore((s) => s.customEndpoints);
+  const models = useMemo(
+    () => endpointModels(customEndpoints),
+    [customEndpoints],
+  );
+  const m = models.find((model) => model.id === defaultModel) ?? models[0];
+  const hasAny = models.length > 0;
 
   return (
     <DropdownMenu>
@@ -576,9 +571,11 @@ function DefaultModelPicker({
           className="h-8 flex-1 justify-between gap-2 px-2.5 text-[11.5px]"
         >
           <span className="flex items-center gap-2 truncate">
-            <ProviderIcon provider={m.provider} size={13} />
-            <span className="truncate">{m.label}</span>
-            <span className="text-muted-foreground">· {m.hint}</span>
+            <ProviderIcon provider="openai-compatible" size={13} />
+            <span className="truncate">
+              {m?.label ?? "No custom endpoints"}
+            </span>
+            <span className="text-muted-foreground">{m?.hint}</span>
           </span>
           <HugeiconsIcon
             icon={ArrowDown01Icon}
@@ -596,35 +593,23 @@ function DefaultModelPicker({
         className="min-w-70 p-1"
       >
         <div className="max-h-72 overflow-y-auto overscroll-contain pr-1">
-          {PROVIDERS.filter((p) => configuredIds.has(p.id)).map((p) => {
-            const models = MODELS.filter((x) => x.provider === p.id);
-            if (models.length === 0) return null;
-            return (
-              <div key={p.id} className="px-1 pt-1.5 first:pt-1">
-                <div className="mb-0.5 flex items-center gap-1.5 px-2 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
-                  <ProviderIcon provider={p.id} size={11} />
-                  <span>{p.label}</span>
-                </div>
-                {models.map((mod) => (
-                  <DropdownMenuItem
-                    key={mod.id}
-                    onSelect={() => void setDefaultModel(mod.id as ModelId)}
-                    className={cn(
-                      "flex items-start gap-2 text-[12px]",
-                      mod.id === defaultModel && "bg-accent/50",
-                    )}
-                  >
-                    <span className="flex flex-1 flex-col">
-                      <span>{mod.label}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {mod.description}
-                      </span>
-                    </span>
-                  </DropdownMenuItem>
-                ))}
-              </div>
-            );
-          })}
+          {models.map((mod) => (
+            <DropdownMenuItem
+              key={mod.id}
+              onSelect={() => void setDefaultModel(mod.id as ModelId)}
+              className={cn(
+                "flex items-start gap-2 text-[12px]",
+                mod.id === defaultModel && "bg-accent/50",
+              )}
+            >
+              <span className="flex flex-1 flex-col">
+                <span>{mod.label}</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {mod.description}
+                </span>
+              </span>
+            </DropdownMenuItem>
+          ))}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -644,7 +629,6 @@ function AutocompleteRow({
   const trigger = usePreferencesStore((s) => s.autocompleteTrigger);
   const provider = usePreferencesStore((s) => s.autocompleteProvider);
   const modelId = usePreferencesStore((s) => s.autocompleteModelId);
-  const eligible = useMemo(() => getAutocompleteEligibleModels(), []);
   const userShortcuts = usePreferencesStore((s) => s.shortcuts);
   const aiCompleteShortcut = useMemo(() => {
     const s = SHORTCUTS.find((x) => x.id === "editor.aiComplete");
@@ -654,43 +638,13 @@ function AutocompleteRow({
   }, [userShortcuts]);
 
   // One selectable model per fully-configured OpenAI-compatible endpoint.
-  const compatItems = useMemo(
-    () =>
-      customEndpoints
-        .filter((e) => e.baseURL.trim() && e.modelId.trim())
-        .map((e) =>
-          getCompatModelInfo(compatModelIdForEndpoint(e.id), customEndpoints),
-        ),
+  const items = useMemo(
+    () => endpointModels(customEndpoints),
     [customEndpoints],
   );
-
-  // Fast cloud tiers + configured local providers + named compat endpoints.
-  const items = useMemo(() => {
-    const local = PROVIDERS.filter(
-      (p) =>
-        isLocalProvider(p.id) &&
-        p.id !== "openai-compatible" &&
-        configuredIds.has(p.id),
-    ).flatMap((p) => {
-      const m = MODELS.find((x) => x.provider === p.id);
-      return m ? [m] : [];
-    });
-    return [...eligible, ...local, ...compatItems];
-  }, [eligible, configuredIds, compatItems]);
-
-  const currentModel = useMemo(() => {
-    if (provider === "openai-compatible" && isCompatModelId(modelId)) {
-      return getCompatModelInfo(modelId, customEndpoints);
-    }
-    if (isLocalProvider(provider)) {
-      return MODELS.find((m) => m.provider === provider) ?? eligible[0];
-    }
-    return (
-      MODELS.find((m) => m.provider === provider && m.id === modelId) ??
-      MODELS.find((m) => m.id === modelId) ??
-      eligible[0]
-    );
-  }, [eligible, provider, modelId, customEndpoints]);
+  const currentModel = items.find(
+    (model) => model.id === modelId && provider === "openai-compatible",
+  );
 
   const setModel = (id: string, providerId: ProviderId) => {
     void setAutocompleteProvider(providerId);
@@ -724,14 +678,16 @@ function AutocompleteRow({
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
-                disabled={!enabled}
+                disabled={!enabled || items.length === 0}
                 className="h-8 flex-1 justify-between gap-2 px-2.5 text-[11.5px]"
               >
                 <span className="flex items-center gap-2 truncate">
-                  <ProviderIcon provider={currentModel.provider} size={12} />
-                  <span className="truncate">{currentModel.label}</span>
+                  <ProviderIcon provider="openai-compatible" size={12} />
+                  <span className="truncate">
+                    {currentModel?.label ?? "Select custom endpoint"}
+                  </span>
                   <span className="text-muted-foreground">
-                    · {currentModel.hint}
+                    {currentModel?.hint}
                   </span>
                 </span>
                 <HugeiconsIcon

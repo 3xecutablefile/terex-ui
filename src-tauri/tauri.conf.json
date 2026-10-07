@@ -1,8 +1,9 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Terax",
+  "productName": "Terex UI",
+  "mainBinaryName": "terex-ui",
   "version": "0.9.0-beta",
-  "identifier": "app.crynta.terax",
+  "identifier": "io.github.3xecutablefile.terex-ui",
   "build": {
     "beforeDevCommand": "pnpm build:cli:dev && pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -14,9 +15,9 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "Terax",
-        "width": 800,
-        "height": 600,
+        "title": "Terex UI",
+        "width": 1440,
+        "height": 860,
         "minWidth": 420,
         "minHeight": 280,
         "titleBarStyle": "Overlay",
@@ -46,10 +47,10 @@
       "../src/modules/terminal/ghostty/webgl/LICENSE.xterm-js": "licenses/terminal/xterm-js.txt"
     },
     "targets": "all",
-    "createUpdaterArtifacts": true,
+    "createUpdaterArtifacts": false,
     "copyright": "Copyright 2026 Crynta",
     "license": "Apache-2.0",
-    "publisher": "Crynta",
+    "publisher": "Terex UI",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -94,11 +95,11 @@
       }
     },
     "category": "DeveloperTool",
-    "shortDescription": "AI-native terminal emulator",
-    "longDescription": "Terax — an open-source AI-native terminal emulator with multi-tab, file explorer, code editor, web preview, voice input, and AI agents.",
+    "shortDescription": "Native AI terminal and system console",
+    "longDescription": "Terex UI: a native purple-and-lime system console with terminals, file browsing, code editing, and AI agents.",
     "fileAssociations": [
       {
-        "name": "Terax Document",
+        "name": "Terex UI Document",
         "role": "Editor",
         "mimeType": "text/plain",
         "ext": [
@@ -119,7 +120,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCQUJGRDhBQjYwRTM0NjkKUldScE5BNjJpdjJyT3dIN0dqbUpHaDA4QW1GaDVmTTllRXdZVk96dFNTRUZ3Y2hiVGszYjFqRloK",
       "endpoints": [
-        "https://github.com/crynta/terax-ai/releases/latest/download/latest.json"
+        "https://github.com/3xecutablefile/terex-ui/releases/latest/download/latest.json"
       ]
     }
   }

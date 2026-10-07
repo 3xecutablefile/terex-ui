@@ -1,4 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { appDataFile } from "@/lib/appData";
 
 export type AgentIconId =
   | "coder"
@@ -83,7 +84,7 @@ const STORE_PATH = "terax-ai-agents.json";
 const KEY_CUSTOM = "customAgents";
 const KEY_ACTIVE = "activeAgentId";
 
-const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
+const store = new LazyStore(appDataFile(STORE_PATH), { defaults: {}, autoSave: 200 });
 
 export type LoadedAgents = {
   custom: Agent[];

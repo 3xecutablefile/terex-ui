@@ -8,8 +8,8 @@ import type { Theme } from "../types";
  */
 export const teraxDefault: Theme = {
   id: "terax-default",
-  name: "Terax Default",
-  description: "Clean neutral greys with a full-color terminal.",
+  name: "Terex UI Amethyst",
+  description: "Purple console with lime accents on a dark surface.",
   editorTheme: { dark: "github-dark", light: "github-light" },
   variants: {
     light: {},

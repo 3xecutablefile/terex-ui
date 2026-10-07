@@ -11,6 +11,7 @@ on:
 
 jobs:
   update:
+    if: github.repository == 'crynta/terax-ai'
     runs-on: ubuntu-latest
     permissions:
       contents: write

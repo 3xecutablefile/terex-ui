@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { findLeafCwd } from "@/modules/terminal/lib/panes";
 import type { Tab } from "./useTabs";
 
-const APP_NAME = "Terax";
+const APP_NAME = "Terex UI";
 
 function basename(path: string): string {
   const parts = path.split(/[\\/]/).filter(Boolean);
@@ -41,6 +41,7 @@ export function useWindowTitle(
     if (project && label && label !== project) title = `${project} — ${label}`;
     else title = project || label || APP_NAME;
 
+    if (title !== APP_NAME) title = `${APP_NAME} / ${title}`;
     document.title = title;
     void getCurrentWindow()
       .setTitle(title)

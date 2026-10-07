@@ -53,7 +53,7 @@ function readSidebarView(): SidebarViewId {
 
 function readSidebarCollapsed(): boolean {
   try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "1";
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) !== "0";
   } catch {
     return false;
   }

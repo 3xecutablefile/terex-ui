@@ -27,8 +27,6 @@ use std::collections::HashMap;
 use std::fs;
 #[cfg(target_os = "linux")]
 use std::path::PathBuf;
-#[cfg(target_os = "linux")]
-use tauri::Manager;
 
 #[derive(Default)]
 pub struct SecretsState {
@@ -45,7 +43,7 @@ pub(crate) fn key(service: &str, account: &str) -> String {
 
 #[cfg(target_os = "linux")]
 fn store_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = app.path().app_local_data_dir().map_err(|e| e.to_string())?;
+    let dir = crate::modules::shared_storage::storage_paths(app)?.local_data;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir.join("secrets.json"))
 }

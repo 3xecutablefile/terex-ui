@@ -440,7 +440,7 @@ fn forward_to_frontend(
         return ControlResponse::failure(
             request.id,
             "frontend_not_ready",
-            "Terax is still restoring its workspace; try again shortly",
+            "Terex UI is still restoring its workspace; try again shortly",
         );
     }
 
@@ -477,7 +477,7 @@ fn forward_to_frontend(
         return ControlResponse::failure(
             id,
             "frontend_unavailable",
-            format!("could not reach Terax UI: {error}"),
+            format!("could not reach Terex UI: {error}"),
         );
     }
 
@@ -501,12 +501,12 @@ fn forward_to_frontend(
                 .lock()
                 .expect("control pending poisoned")
                 .remove(&id);
-            ControlResponse::failure(id, "frontend_timeout", "Terax UI did not respond in time")
+            ControlResponse::failure(id, "frontend_timeout", "Terex UI did not respond in time")
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => ControlResponse::failure(
             id,
             "frontend_unavailable",
-            "Terax UI response channel closed",
+            "Terex UI response channel closed",
         ),
     }
 }

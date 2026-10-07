@@ -22,6 +22,7 @@ import {
 import type { KeyBinding, ShortcutId } from "@/modules/shortcuts/shortcuts";
 import { emit, listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { appDataFile } from "@/lib/appData";
 
 export type ThemePref = "system" | "light" | "dark";
 
@@ -307,7 +308,7 @@ export const TERMINAL_SCROLLBACK_PRESETS = [
 ] as const;
 
 export const DEFAULT_PREFERENCES: Preferences = {
-  theme: "system",
+  theme: "dark",
   themeId: DEFAULT_THEME_ID,
   backgroundKind: "none",
   backgroundImageId: null,
@@ -318,7 +319,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   editorFontSize: EDITOR_FONT_SIZE_DEFAULT,
   customInstructions: "",
   autostart: false,
-  windowVibrancy: true,
+  windowVibrancy: false,
   restoreWindowState: true,
   autocompleteEnabled: false,
   autocompleteTrigger: "auto",
@@ -373,7 +374,7 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lspCustomServers: [],
 };
 
-const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
+const store = new LazyStore(appDataFile(STORE_PATH), { defaults: {}, autoSave: 200 });
 
 // LazyStore.onChange only fires within the writing process. The settings
 // page lives in a separate webview, so writes there never reach the main

@@ -38,7 +38,7 @@ jobs:
         run: pnpm check-types
 
       - name: Test
-        run: pnpm test
+        run: pnpm exec vitest run --maxWorkers=4
 
       - name: React Compiler healthcheck (advisory)
         run: pnpm exec react-compiler-healthcheck

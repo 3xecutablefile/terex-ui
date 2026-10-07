@@ -71,7 +71,7 @@ function resolveTheme(id: string, custom: Theme[]): Theme {
   return custom.find((t) => t.id === id) ?? getBuiltinTheme(id) ?? getDefaultTheme();
 }
 
-export function ThemeProvider({ children, defaultMode = "system" }: ThemeProviderProps) {
+export function ThemeProvider({ children, defaultMode = "dark" }: ThemeProviderProps) {
   const [mode, setModeState] = useState<ThemePref>(() => readFastMode(defaultMode));
   const [themeId, setThemeIdState] = useState<string>(() => readFastThemeId());
   const [previewId, setPreviewId] = useState<string | null>(null);

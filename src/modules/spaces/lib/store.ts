@@ -1,4 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { appDataFile } from "@/lib/appData";
 import type { WorkspaceEnv } from "@/modules/workspace";
 import type { SerializedTab } from "./serialize";
 
@@ -24,7 +25,7 @@ const KEY_ACTIVE = "activeId";
 const STATE_PREFIX = "state:";
 const stateKey = (id: string) => `${STATE_PREFIX}${id}`;
 
-const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 500 });
+const store = new LazyStore(appDataFile(STORE_PATH), { defaults: {}, autoSave: 500 });
 
 export type LoadedSpaces = {
   spaces: SpaceMeta[];

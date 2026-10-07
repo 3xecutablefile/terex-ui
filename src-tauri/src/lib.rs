@@ -215,7 +215,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             modules::window_presentation::macos::install(_app.handle());
             if let Err(error) = control::start(_app.handle().clone(), control_for_setup.clone()) {
-                log::warn!("could not start Terax control server: {error}");
+                log::warn!("could not start Terex UI control server: {error}");
             }
             #[cfg(target_os = "macos")]
             if let Some(main) = _app.get_webview_window("main") {
@@ -232,6 +232,7 @@ pub fn run() {
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .manage(modules::dashboard::DashboardState::default())
         .manage(modules::window_presentation::WindowPresentationState::default())
         .manage(control_state)
         .manage(shell::ShellState::default())
@@ -251,6 +252,8 @@ pub fn run() {
         .manage(LaunchDir(Mutex::new(cli_dir)))
         .manage(LaunchFiles(Mutex::new(launch.files)))
         .invoke_handler(tauri::generate_handler![
+            modules::shared_storage::shared_storage_paths,
+            modules::dashboard::dashboard_snapshot,
             pty::pty_open,
             pty::pty_write,
             pty::pty_ack_output,

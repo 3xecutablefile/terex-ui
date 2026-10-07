@@ -126,7 +126,7 @@ describe("vibrancy application", () => {
     await vibrancy.applyVibrancy(true, true);
 
     expect(root.attrs.has("data-vibrancy")).toBe(false);
-    expect(root.style.backgroundColor).toBe("#141414");
+    expect(root.style.backgroundColor).toBe("#24212c");
     const backdrop = core.invoke.mock.calls.filter(
       (c) => c[0] === "window_set_backdrop",
     );
@@ -146,7 +146,7 @@ describe("vibrancy application", () => {
     await vibrancy.applyVibrancy(true, true);
 
     expect(root.attrs.has("data-vibrancy")).toBe(false);
-    expect(root.style.backgroundColor).toBe("#141414");
+    expect(root.style.backgroundColor).toBe("#24212c");
 
     core.invoke.mockImplementation(() => Promise.resolve());
     await vibrancy.applyVibrancy(true, true);
@@ -161,7 +161,7 @@ describe("vibrancy application", () => {
 
     await vibrancy.applyVibrancy(false, false);
 
-    expect(root.style.backgroundColor).toBe("#ffffff");
+    expect(root.style.backgroundColor).toBe("#24212c");
     expect(core.invoke).toHaveBeenCalledWith("window_set_backdrop", {
       enabled: false,
       dark: false,

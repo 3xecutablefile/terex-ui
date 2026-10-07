@@ -1,4 +1,5 @@
 import { LazyStore } from "@tauri-apps/plugin-store";
+import { appDataFile } from "@/lib/appData";
 
 export type TodoStatus = "pending" | "in_progress" | "completed";
 
@@ -12,7 +13,7 @@ export type Todo = {
 const STORE_PATH = "terax-ai-todos.json";
 const todosKey = (sessionId: string) => `todos:${sessionId}`;
 
-const store = new LazyStore(STORE_PATH, { defaults: {}, autoSave: 200 });
+const store = new LazyStore(appDataFile(STORE_PATH), { defaults: {}, autoSave: 200 });
 
 export async function loadTodos(sessionId: string): Promise<Todo[]> {
   return (await store.get<Todo[]>(todosKey(sessionId))) ?? [];

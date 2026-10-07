@@ -239,7 +239,7 @@ export function useGhosttyTerminalSession({
   );
   const applyTheme = useCallback(() => {
     const session = sessions.get(leafId);
-    if (!session?.model || !session.surface) return;
+    if (!session?.model) return;
     const theme = readTerminalGpuTheme();
     session.model.setColors(
       rgbToInt(theme.foreground),
@@ -247,7 +247,7 @@ export function useGhosttyTerminalSession({
       rgbToInt(theme.cursor),
       theme.palette.map(rgbToInt),
     );
-    session.surface.setTheme(theme);
+    session.surface?.setTheme(theme);
     if (session.surfaceOptions)
       session.surfaceOptions = { ...session.surfaceOptions, theme };
   }, [leafId]);
