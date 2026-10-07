@@ -19,9 +19,9 @@ function distroCommand(key: DistroKey, version: string): string {
     case "arch":
       return "yay -S terax-bin";
     case "debian":
-      return `sudo apt install ./terex-ui_${version}_amd64.deb`;
+      return `sudo apt install ./Terex.UI_${version}_amd64.deb`;
     case "fedora":
-      return `sudo dnf install ./terex-ui-${version}-1.x86_64.rpm`;
+      return `sudo dnf install ./Terex.UI-${version}-1.x86_64.rpm`;
   }
 }
 

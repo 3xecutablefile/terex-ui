@@ -37,6 +37,12 @@ import type {
   WebGlTerminalSurfaceOptions,
 } from "./webgl/WebGlTerminalSurface";
 
+import {
+  directoryCommand,
+  directorySyncState,
+  type DirectorySyncState,
+} from "@/modules/terminal/lib/directorySync";
+
 type GhosttyBackend = Extract<TerminalBackendKind, `ghostty-${string}`>;
 type GhosttySurface = WebGpuTerminalSurface | WebGlTerminalSurface;
 type GhosttySurfaceBaseOptions = Omit<WebGlTerminalSurfaceOptions, "onError">;
@@ -59,6 +65,7 @@ type Callbacks = {
 };
 
 type GhosttySession = {
+  directorySync: DirectorySyncState;
   readonly leafId: number;
   readonly backend: GhosttyBackend;
   initialCwd: string | undefined;
@@ -285,7 +292,38 @@ export function hasGhosttySession(leafId: number): boolean {
 export function writeToGhosttySession(leafId: number, data: string): boolean {
   const session = sessions.get(leafId);
   if (!session || session.shellExited || session.disposed) return false;
-  return session.writer.enqueue(textEncoder.encode(data));
+  const accepted = session.writer.enqueue(textEncoder.encode(data));
+  if (accepted)
+    session.directorySync = directorySyncState(session.directorySync, "input");
+  return accepted;
+}
+
+export async function changeGhosttyDirectory(
+  leafId: number,
+  path: string,
+  windows: boolean,
+): Promise<void> {
+  const command = directoryCommand(path, windows);
+  const session = sessions.get(leafId);
+  if (!session?.pty || session.shellExited || session.disposed)
+    throw new Error("Terminal is not ready.");
+  if (session.lastCwd === path) return;
+  const generation = session.generation;
+  const canSync = () =>
+    session.directorySync === "ready" && !ghosttyBlocks(leafId)?.draft;
+  if (!canSync())
+    throw new Error("Finish or clear the current terminal input before syncing this folder.");
+  const busy = await invoke<boolean>("pty_has_foreground_process", {
+    id: session.pty.id,
+  });
+  if (
+    busy !== false || !canSync() ||
+    session.generation !== generation || session.disposed
+  ) {
+    throw new Error("Terminal is busy; its directory was not changed.");
+  }
+  if (!submitToGhosttySession(leafId, command))
+    throw new Error("Terminal could not accept the directory change.");
 }
 
 export function submitToGhosttySession(leafId: number, text: string): boolean {
@@ -297,6 +335,7 @@ export function submitToGhosttySession(leafId: number, text: string): boolean {
   );
   const accepted = session.writer.enqueue(textEncoder.encode(data));
   if (accepted) {
+    session.directorySync = directorySyncState(session.directorySync, "input");
     const blocks = ghosttyBlocks(leafId);
     if (blocks) {
       blocks.everSubmitted = true;
@@ -434,6 +473,7 @@ export async function respawnGhosttySession(
   session.pty = null;
   session.shellExited = false;
   session.lastCwd = null;
+  session.directorySync = "unknown";
   session.initialCwd = cwd ?? session.initialCwd;
   session.startupError = null;
   session.rendererError = null;
@@ -529,6 +569,7 @@ function ensureSession(
     },
   );
   const session: GhosttySession = {
+    directorySync: "unknown",
     leafId,
     backend,
     initialCwd,
@@ -670,6 +711,9 @@ async function initializeSessionGeneration(
     },
     onReply: (bytes) => session.writer.enqueue(bytes),
     onEvent: (event) => {
+      session.directorySync = directorySyncState(
+        session.directorySync, event.type,
+      );
       semanticEvents.handle(event);
       ghosttyBlocks(session.leafId)?.controller?.handle(
         event,
@@ -855,7 +899,8 @@ function createGhosttyInput(
         !(bytes.length === 1 && bytes[0] === 3)
       )
         return;
-      session.writer.enqueue(bytes);
+      if (session.writer.enqueue(bytes))
+        session.directorySync = directorySyncState(session.directorySync, "input");
     },
     onKeyDown: (event) => {
       const blocks = ghosttyBlocks(session.leafId);

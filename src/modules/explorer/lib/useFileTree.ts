@@ -288,6 +288,10 @@ export function useFileTree(rootPath: string | null, options?: Options) {
         if (current[p]?.status === "loaded") dirs.add(p);
       }
       for (const d of dirs) void fetchChildren(d);
+    }, () => {
+      for (const [path, node] of Object.entries(nodesRef.current)) {
+        if (node.status === "loaded") void fetchChildren(path);
+      }
     }).then((un) => {
       if (alive) unlisten = un;
       else un();

@@ -7,6 +7,10 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { consumeLaunchFiles, getLaunchDir } from "@/lib/launchDir";
 import { quoteShellArg } from "@/lib/shellQuote";
+import { IS_WINDOWS } from "@/lib/platform";
+import { readTerminalClipboard, writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
+import { pasteIntoSession } from "@/modules/terminal/lib/terminalSessionApi";
+import { toast } from "sonner";
 import { usePresence } from "@/lib/usePresence";
 import { useZoom } from "@/lib/useZoom";
 import { isMarkdownPath } from "@/lib/utils";
@@ -85,6 +89,7 @@ import {
 import { DEFAULT_SPACE_ID } from "@/modules/tabs/lib/useTabs";
 import {
   clearFocusedTerminal,
+  changeSessionDirectory,
   disposeSession,
   findLeafCwd,
   hasLeaf,
@@ -1384,8 +1389,10 @@ export default function App() {
       <TooltipProvider>
         <div className="relative flex h-screen flex-col overflow-hidden bg-frame text-foreground">
           <Desktop
-            cwd={explorerRoot}
+            cwd={activeCwd ?? explorerRoot}
             activeId={activeId}
+            scopeKey={`${activeId}:${activeLeafId ?? "none"}`}
+            terminalLabel={activeTerminalTab?.customTitle || activeCwd?.split(/[\\/]/).filter(Boolean).pop() || "Terminal"}
             ready={booted}
             terminalActive={isTerminalTab}
             zen={zenMode}
@@ -1398,6 +1405,14 @@ export default function App() {
             }}
             onOpenFile={(path) => handleOpenFile(path, true)}
             onTerminal={(path) => newTab(path)}
+            onNavigate={(path) => activeLeafId === null ? Promise.resolve() : changeSessionDirectory(activeLeafId, path, IS_WINDOWS && workspaceEnv.kind === "local")}
+            getSelection={() => window.getSelection()?.toString() || captureActiveSelection() || ""}
+            onCopy={(text) => {void writeTerminalClipboard(text).catch((error) => toast.error(String(error)));}}
+            onPaste={() => {
+              if (activeLeafId === null) return;
+              const leaf = activeLeafId;
+              void readTerminalClipboard().then((text) => { if (text) pasteIntoSession(leaf, text); });
+            }}
             onAi={togglePanelAndFocus}
             onAttach={handleAttachFileToAgent}
             onSettings={() => void openSettingsWindow()}

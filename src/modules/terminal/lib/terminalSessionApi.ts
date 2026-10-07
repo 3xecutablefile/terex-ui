@@ -1,6 +1,7 @@
 import type { BlockMode } from "@/modules/terminal/block/lib/modeMachine";
 import {
   clearGhosttySession,
+  changeGhosttyDirectory,
   disposeGhosttySession,
   focusGhosttySession,
   ghosttyFocusedLeaf,
@@ -38,6 +39,10 @@ export async function whenSessionReady(
     }
     await delay(Math.min(10, remaining));
   }
+}
+
+export function changeSessionDirectory(leafId: number, path: string, windows: boolean): Promise<void> {
+  return changeGhosttyDirectory(leafId, path, windows);
 }
 
 export function writeToSession(leafId: number, data: string): boolean {

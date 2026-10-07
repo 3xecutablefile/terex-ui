@@ -1,6 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { currentWorkspaceEnv } from "@/modules/workspace";
+import {
+  subscribeWindowPresentation,
+  terminalWindowPresentation,
+} from "@/modules/terminal/ghostty/windowPresentation";
 
 const FS_CHANGED_EVENT = "fs:changed";
 
@@ -22,13 +26,31 @@ export function watchRemove(paths: string[]): void {
   }).catch(() => {});
 }
 
-export function listenFsChanged(
+export async function listenFsChanged(
   handler: (paths: string[]) => void,
+  refreshOnResume?: () => void,
 ): Promise<() => void> {
-  return getCurrentWebviewWindow().listen<FsChangedPayload>(
+  let dirty = false;
+  const stop = await getCurrentWebviewWindow().listen<FsChangedPayload>(
     FS_CHANGED_EVENT,
-    (e) => handler(e.payload.paths),
+    (e) => {
+      if (refreshOnResume && !terminalWindowPresentation().visible) dirty = true;
+      else handler(e.payload.paths);
+    },
   );
+  // ponytail: collapse hidden UI notifications to one refresh, without buffering paths.
+  const stopVisibility = refreshOnResume
+    ? subscribeWindowPresentation(({ visible }) => {
+        if (visible && dirty) {
+          dirty = false;
+          refreshOnResume();
+        }
+      })
+    : () => {};
+  return () => {
+    stop();
+    stopVisibility();
+  };
 }
 
 export function parentDir(path: string): string {

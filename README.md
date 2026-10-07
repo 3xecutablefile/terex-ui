@@ -38,7 +38,10 @@ The packaged desktop app does not require Node.js or pnpm to run.
 ## Workspace
 
 - **FILES:** native three-column browsing. Single click selects; double click or
-  Enter opens a folder, editor, or preview from any column or file tile.
+  Enter opens a folder, editor, or preview from any column. File controls live
+  here, with no duplicate bottom-left explorer. Folder navigation updates an
+  idle terminal's directory; terminal `cd` changes update Files. Pending input or
+  running commands are preserved; **Sync terminal** retries once the prompt is ready.
 - **WORKSPACE:** GPU-rendered Ghostty terminals, persistent tabs, split panes,
   code editing, source control, and web previews.
 - **AI AGENT:** chat, project context, attachments, voice, and approval-gated
@@ -50,6 +53,15 @@ The packaged desktop app does not require Node.js or pnpm to run.
 Shells and filesystem operations run through Rust. CPU, memory, process, disk,
 and interface counters come from native system APIs. The globe is decorative;
 no geolocation service is contacted.
+
+### Background Work
+
+Dashboard samples run every five seconds while visible, with process/disk scans
+cached for fifteen seconds. Dashboard timers and the clock stop when the window
+is hidden or occluded; filesystem watchers and listings pause when Files is not
+visible. Terminal input and output retain their independent responsive path.
+Right-click opens app actions, while editable fields keep their standard editing
+menus. The interface still uses Tauri's system WebView.
 
 ## AI Setup And Existing Data
 

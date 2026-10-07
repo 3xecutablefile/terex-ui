@@ -9,9 +9,11 @@ impl Default for DashboardState {
     fn default() -> Self {
         Self(Arc::new(Mutex::new(Monitor {
             system: System::new(),
-            networks: Networks::new_with_refreshed_list(),
-            disks: Disks::new_with_refreshed_list(),
+            networks: Networks::new(),
+            disks: Disks::new(),
             sampled: Instant::now(),
+            details_sampled: None,
+            processes: Vec::new(),
         })))
     }
 }
@@ -21,6 +23,8 @@ struct Monitor {
     networks: Networks,
     disks: Disks,
     sampled: Instant,
+    details_sampled: Option<Instant>,
+    processes: Vec<Process>,
 }
 
 #[derive(Serialize)]
@@ -47,7 +51,7 @@ pub struct Snapshot {
     disks: Vec<Disk>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 struct Process {
     pid: u32,
     name: String,
@@ -66,28 +70,36 @@ impl Monitor {
     fn snapshot(&mut self) -> Snapshot {
         let elapsed = self.sampled.elapsed().as_secs_f64().max(0.2);
         self.sampled = Instant::now();
-        self.system.refresh_cpu_all();
+        self.system.refresh_cpu_usage();
         self.system.refresh_memory();
-        self.system.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            ProcessRefreshKind::nothing().with_cpu().with_memory(),
-        );
+        if self
+            .details_sampled
+            .is_none_or(|last| last.elapsed().as_secs() >= 15)
+        {
+            self.system.refresh_processes_specifics(
+                ProcessesToUpdate::All,
+                true,
+                ProcessRefreshKind::nothing().with_cpu().with_memory(),
+            );
+            self.disks.refresh(true);
+            let mut processes: Vec<_> = self
+                .system
+                .processes()
+                .iter()
+                .map(|(pid, p)| Process {
+                    pid: pid.as_u32(),
+                    name: p.name().to_string_lossy().into_owned(),
+                    cpu: p.cpu_usage(),
+                    memory: p.memory(),
+                })
+                .collect();
+            processes
+                .sort_unstable_by(|a, b| b.cpu.total_cmp(&a.cpu).then(b.memory.cmp(&a.memory)));
+            processes.truncate(5);
+            self.processes = processes;
+            self.details_sampled = Some(Instant::now());
+        }
         self.networks.refresh(true);
-        self.disks.refresh(true);
-        let mut processes: Vec<_> = self
-            .system
-            .processes()
-            .iter()
-            .map(|(pid, p)| Process {
-                pid: pid.as_u32(),
-                name: p.name().to_string_lossy().into_owned(),
-                cpu: p.cpu_usage(),
-                memory: p.memory(),
-            })
-            .collect();
-        processes.sort_unstable_by(|a, b| b.cpu.total_cmp(&a.cpu).then(b.memory.cmp(&a.memory)));
-        processes.truncate(5);
         let network = self
             .networks
             .iter()
@@ -114,7 +126,7 @@ impl Monitor {
             memory_total: self.system.total_memory(),
             swap_used: self.system.used_swap(),
             swap_total: self.system.total_swap(),
-            processes,
+            processes: self.processes.clone(),
             interface: network.map(|(name, _)| name.clone()),
             address: network.and_then(|(_, n)| {
                 n.ip_networks()
@@ -166,6 +178,9 @@ mod tests {
     fn native_snapshot_has_bounded_processes_and_finite_rates() {
         let state = DashboardState::default();
         let s = state.0.lock().unwrap().snapshot();
+        let details_sampled = state.0.lock().unwrap().details_sampled;
+        state.0.lock().unwrap().snapshot();
+        assert_eq!(state.0.lock().unwrap().details_sampled, details_sampled);
         assert!(s.processes.len() <= 5);
         assert!(s.memory_used <= s.memory_total);
         assert!(s.received.is_finite() && s.received >= 0.0);

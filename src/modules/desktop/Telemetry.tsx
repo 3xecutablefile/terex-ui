@@ -1,23 +1,27 @@
 // biome-ignore-all lint/suspicious/noArrayIndexKey: Hardware core indexes and fixed memory cells never reorder.
 import { bytes, type SystemSnapshot } from "@/modules/desktop/model";
+import { subscribeWindowPresentation } from "@/modules/terminal/ghostty/windowPresentation";
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
 
 type Sample = { cpu: number; received: number; transmitted: number };
 
-export function useTelemetry() {
+export function useTelemetry(enabled = true) {
   const [snapshot, setSnapshot] = useState<SystemSnapshot | null>(null);
   const [history, setHistory] = useState<Sample[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
+    if (!enabled) return;
     let disposed = false;
     let pending = false;
+    let visible = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const sample = async () => {
-      if (disposed || pending || document.hidden) return;
+      if (disposed || pending || !visible) return;
       pending = true;
       try {
         const next = await invoke<SystemSnapshot>("dashboard_snapshot");
-        if (!disposed) {
+        if (!disposed && visible) {
           setSnapshot(next);
           setError("");
           const cpu =
@@ -29,28 +33,41 @@ export function useTelemetry() {
           ]);
         }
       } catch (e) {
-        if (!disposed) setError(String(e));
+        if (!disposed && visible) setError(String(e));
       } finally {
         pending = false;
+        if (!disposed && visible) timer = setTimeout(sample, 5000);
       }
     };
-    void sample();
-    const timer = setInterval(() => void sample(), 2000);
-    document.addEventListener("visibilitychange", sample);
+    const unsubscribe = subscribeWindowPresentation((state) => {
+      visible = state.visible;
+      clearTimeout(timer);
+      if (visible) void sample();
+    });
     return () => {
       disposed = true;
-      clearInterval(timer);
-      document.removeEventListener("visibilitychange", sample);
+      clearTimeout(timer);
+      unsubscribe();
     };
-  }, []);
+  }, [enabled]);
   return { snapshot, history, error };
 }
 
 function Clock() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(timer);
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const unsubscribe = subscribeWindowPresentation(({ visible }) => {
+      clearInterval(timer);
+      if (visible) {
+        setNow(new Date());
+        timer = setInterval(() => setNow(new Date()), 1000);
+      }
+    });
+    return () => {
+      clearInterval(timer);
+      unsubscribe();
+    };
   }, []);
   return (
     <>
@@ -428,7 +445,7 @@ export function NetworkRail({
         values={history.map((sample) => sample.received)}
         second={history.map((sample) => sample.transmitted)}
         max={max}
-        label="Network receive and transmit rates over the last two minutes"
+        label="Network receive and transmit rates over the last five minutes"
       />
       <div className="terex-transfer-total">
         <span>RECEIVED {bytes(s?.totalReceived)}</span>

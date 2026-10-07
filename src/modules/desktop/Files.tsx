@@ -5,11 +5,20 @@ import {
   watchAdd,
   watchRemove,
 } from "@/modules/explorer/lib/watch";
+import {
+  subscribeWindowPresentation,
+  terminalWindowPresentation,
+} from "@/modules/terminal/ghostty/windowPresentation";
 import { useWorkspaceEnvStore } from "@/modules/workspace";
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-function useDirectory(path: string | null, hidden: boolean, revision: number) {
+function useDirectory(
+  path: string | null,
+  hidden: boolean,
+  revision: number,
+  enabled: boolean,
+) {
   const workspace = useWorkspaceEnvStore((s) => s.env);
   const [result, setResult] = useState<{
     path: string | null;
@@ -19,6 +28,7 @@ function useDirectory(path: string | null, hidden: boolean, revision: number) {
   }>({ path: null, entries: [], error: "", pending: false });
   // biome-ignore lint/correctness/useExhaustiveDependencies: Revision explicitly invalidates a directory listing.
   useEffect(() => {
+    if (!enabled) return;
     let alive = true;
     if (!path) {
       setResult({ path, entries: [], error: "", pending: false });
@@ -52,28 +62,47 @@ function useDirectory(path: string | null, hidden: boolean, revision: number) {
     return () => {
       alive = false;
     };
-  }, [path, hidden, workspace, revision]);
+  }, [path, hidden, workspace, revision, enabled]);
   return result;
 }
 
 export function useDesktopFiles(
   cwd: string | null,
   onOpenFile: (path: string) => void,
+  scopeKey: string,
+  onNavigate: (path: string) => Promise<void>,
+  enabled = true,
 ) {
   const [path, setPath] = useState<string | null>(cwd);
   const [hidden, setHidden] = useState(false);
   const [revision, setRevision] = useState(0);
   const [selection, setSelection] = useState("");
   const [actionError, setActionError] = useState("");
+  const navigation = useRef(0);
+  const [presented, setPresented] = useState(
+    () => terminalWindowPresentation().visible,
+  );
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeWindowPresentation((state) => setPresented(state.visible));
+  }, [enabled]);
+  const active = enabled && presented;
   const workspace = useWorkspaceEnvStore((s) => s.env);
   const reload = useCallback(() => setRevision((n) => n + 1), []);
   // biome-ignore lint/correctness/useExhaustiveDependencies: Changing workspace must discard the previous workspace's navigation.
   useEffect(() => {
+    navigation.current++;
     setPath(cwd);
     setSelection("");
-  }, [cwd, workspace]);
-  const current = useDirectory(path, hidden, revision);
-  const parent = useDirectory(path ? parentPath(path) : null, hidden, revision);
+    setActionError("");
+  }, [cwd, workspace, scopeKey]);
+  const current = useDirectory(path, hidden, revision, active);
+  const parent = useDirectory(
+    path ? parentPath(path) : null,
+    hidden,
+    revision,
+    active,
+  );
   const selected =
     current.entries.find((entry) => entry.name === selection) ??
     current.entries[0];
@@ -81,9 +110,10 @@ export function useDesktopFiles(
     path && selected?.kind === "dir" ? joinPath(path, selected.name) : null,
     hidden,
     revision,
+    active,
   );
   useEffect(() => {
-    if (!path) return;
+    if (!path || !active) return;
     let disposed = false;
     let watching = false;
     let unlisten: (() => void) | undefined;
@@ -116,11 +146,20 @@ export function useDesktopFiles(
       unlisten?.();
       if (watching) watchRemove([path]);
     };
-  }, [path, reload, workspace]);
+  }, [path, reload, workspace, active]);
+  const sync = (next = path) => {
+    if (!next) return;
+    const request = ++navigation.current;
+    setActionError("");
+    void onNavigate(next).catch((error) => {
+      if (request === navigation.current) setActionError(String(error));
+    });
+  };
   const navigate = (next: string) => {
     setActionError("");
     setSelection("");
     setPath(next);
+    sync(next);
   };
   async function open(entry: DirEntry, directory = path) {
     if (!directory) return;
@@ -156,6 +195,7 @@ export function useDesktopFiles(
     navigate,
     open,
     reload,
+    sync: () => sync(),
     error: actionError || current.error,
   };
 }
@@ -307,106 +347,70 @@ export function Commander({ files }: { files: DesktopFiles }) {
   );
 }
 
-export function FileTiles({
+export function FileActions({
   files,
-  onSettings,
   onTerminal,
   onAttach,
-  onBrowse,
+  terminalActive,
 }: {
   files: DesktopFiles;
-  onSettings: () => void;
   onTerminal: (path: string) => void;
   onAttach: (path: string) => void;
-  onBrowse: () => void;
+  terminalActive: boolean;
 }) {
   return (
-    <section className="terex-filesystem" aria-label="Filesystem">
-      <div className="terex-rule">
-        <span>FILESYSTEM</span>
-        <span title={files.path ?? ""}>{files.path ?? "--"}</span>
-      </div>
-      <div className="terex-tiles">
-        <button
-          type="button"
-          className="terex-tile"
-          aria-pressed={files.hidden}
-          onClick={files.toggleHidden}
-        >
-          <span className="terex-action-glyph" aria-hidden="true">
-            ▦
-          </span>
-          <span>Show hidden</span>
-        </button>
-        <button
-          type="button"
-          className="terex-tile"
-          disabled={!files.path || parentPath(files.path) === files.path}
-          onClick={() => {
-            if (files.path) files.navigate(parentPath(files.path));
-            onBrowse();
-          }}
-        >
-          <span className="terex-action-glyph" aria-hidden="true">
-            ↰
-          </span>
-          <span>Go up</span>
-        </button>
-        {files.current.entries.map((entry) => (
-          <button
-            type="button"
-            className="terex-tile"
-            key={entry.name}
-            title={entry.name}
-            aria-pressed={files.selected?.name === entry.name}
-            onClick={() => {
-              files.select(entry.name);
-            }}
-            onDoubleClick={() => {
-              if (entry.kind !== "file") onBrowse();
-              void files.open(entry);
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== "Enter") return;
-              event.preventDefault();
-              if (entry.kind !== "file") onBrowse();
-              void files.open(entry);
-            }}
-          >
-            <FileGlyph kind={entry.kind} />
-            <span>{entry.name}</span>
-          </button>
-        ))}
-      </div>
-      <div className="terex-file-tools">
-        <button type="button" onClick={files.reload}>
-          REFRESH
-        </button>
-        <button
-          type="button"
-          disabled={!files.path}
-          onClick={() => {
-            if (files.path) onTerminal(files.path);
-          }}
-        >
-          TERMINAL HERE
-        </button>
-        <button
-          type="button"
-          disabled={
-            !files.path || !files.selected || files.selected.kind === "dir"
-          }
-          onClick={() => {
-            if (files.path && files.selected)
-              onAttach(joinPath(files.path, files.selected.name));
-          }}
-        >
-          ATTACH TO AI
-        </button>
-        <button type="button" onClick={onSettings}>
-          SETTINGS
-        </button>
-      </div>
-    </section>
+    <div
+      className="terex-file-actions"
+      role="toolbar"
+      aria-label="File actions"
+    >
+      <button
+        type="button"
+        aria-pressed={files.hidden}
+        onClick={files.toggleHidden}
+      >
+        Show hidden
+      </button>
+      <button
+        type="button"
+        disabled={!files.path || parentPath(files.path) === files.path}
+        onClick={() => {
+          if (files.path) files.navigate(parentPath(files.path));
+        }}
+      >
+        Go up
+      </button>
+      <button
+        type="button"
+        disabled={!terminalActive || !files.path}
+        onClick={files.sync}
+      >
+        Sync terminal
+      </button>
+      <button type="button" onClick={files.reload}>
+        REFRESH
+      </button>
+      <button
+        type="button"
+        disabled={!files.path}
+        onClick={() => {
+          if (files.path) onTerminal(files.path);
+        }}
+      >
+        TERMINAL HERE
+      </button>
+      <button
+        type="button"
+        disabled={
+          !files.path || !files.selected || files.selected.kind === "dir"
+        }
+        onClick={() => {
+          if (files.path && files.selected)
+            onAttach(joinPath(files.path, files.selected.name));
+        }}
+      >
+        ATTACH TO AI
+      </button>
+    </div>
   );
 }

@@ -17,7 +17,17 @@ Fork crynta/terax-ai as terex-ui. Match the supplied eDEX reference: charcoal ba
 - Native checks: cargo test --manifest-path src-tauri/Cargo.toml --locked; cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings.
 
 ## State
-Public repository verified. User explicitly approved committing/pushing all current app and branding changes, then requested automatic releases on pushes without manual tag pushes. Public-facing name is now Terex UI. Native builds use `Terex UI.app`; the executable and repository slug remain `terex-ui`. Local validation passed; changes are ready for the authorized push. Checks must remain headless; no subagents.
+Public repository verified. Commit `841cf57` published the full app and release automation. The initial fork workflow was enabled and manually dispatched; all four platform builds and release publishing passed: https://github.com/3xecutablefile/terex-ui/releases/tag/build-1-1 (run 37634415566). User then requested Files/terminal synchronization, removal of the duplicate bottom-left explorer, and lower battery use/app context menus. These follow-up changes are being verified for the next authorized push. Checks must remain headless; no subagents.
+
+## Current Follow-up
+- Removed FileTiles/bottom explorer. FileActions toolbar is inside Files; keyboard spans the lower area. The Files view names the actual active terminal directory rather than a hardcoded terminal label.
+- Files follows the active leaf's real cwd and resets on tab/pane switches. Directory navigation submits quoted cd commands only after shell integration reports an empty prompt, no block draft exists, and the native foreground-process check is clear. Terminal output replies do not count as user input. Errors preserve pending commands and allow explicit Sync terminal retry.
+- Root app context menu offers copy, terminal paste, Files, new terminal, settings. Editable controls retain their own editing menu. No claim of replacing WebView rendering with native widgets.
+- Dashboard polling moved from 2s to 5s, process/disk scans cached for 15s, clock/dashboard timers stop on native occlusion/sleep or DOM hiding. Files listings/watchers stop when not visible. No measured battery-life claim.
+- Headless regression passed for two-way cwd sync, no duplicate explorer, custom context menu, zero dashboard/clock updates while hidden, shared data, custom models, themes, AI draft preservation, and five viewport sizes. Frontend suite: 1,214 passed across 174 files.
+- The hidden-window regression also caught the original sidebar re-listing directories; its UI watcher now coalesces hidden notifications into a single refresh on resume, while editor conflict handling is preserved. Tests verify no hidden directory listing calls.
+- Additional headless checks confirm right-click actions on the terminal canvas and that existing typed input blocks automatic cd instead of being cleared or appended to.
+- Follow-up native app build and size budgets passed. The final production-asset regression passed too; the changes are ready for the authorized follow-up commit/push. The first GitHub release contains all nine installers/archives plus checksums.
 
 ## Release Automation
 - `.github/workflows/release.yml`: push to main or workflow_dispatch; frontend verification then macOS ARM64/Intel, Linux x64, Windows x64 builds; publish only when all builds pass.

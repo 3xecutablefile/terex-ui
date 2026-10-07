@@ -15,6 +15,7 @@ export {
 } from "./lib/panes";
 export {
   clearFocusedTerminal,
+  changeSessionDirectory,
   disposeSession,
   leafHasForegroundProcess,
   leafIdForPty,

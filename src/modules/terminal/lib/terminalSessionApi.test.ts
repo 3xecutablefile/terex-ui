@@ -15,6 +15,7 @@ import {
 
 vi.mock("@/modules/terminal/ghostty/useGhosttyTerminalSession", () => ({
   clearGhosttySession: vi.fn(() => false),
+  changeGhosttyDirectory: vi.fn(async () => {}),
   disposeGhosttySession: vi.fn(() => false),
   focusGhosttySession: vi.fn(),
   ghosttyFocusedLeaf: vi.fn(() => null),
