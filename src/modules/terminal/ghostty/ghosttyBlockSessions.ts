@@ -6,11 +6,13 @@ import type { BlockMode } from "@/modules/terminal/block/lib/modeMachine";
 export type WatermarkState = "visible" | "hidden" | "dead";
 
 export class GhosttyBlockSession {
+  enabled=true;
   controller: GhosttyBlocks | null = null;
   model: GhosttyTerminalModelApi | null = null;
   focus: (() => void) | null = null;
   paste: ((text: string) => void) | null = null;
   keyDown: ((event: KeyboardEvent) => boolean) | null = null;
+  acceptSuggestion: ((run:boolean)=>boolean)|null=null;
   draft = "";
   inputActive = false;
   everSubmitted = false;
@@ -82,7 +84,8 @@ export class GhosttyBlockSession {
     for (const listener of this.viewportListeners) listener();
   }
 
-  readonly getMode = (): BlockMode => this.mode;
+  setEnabled(enabled:boolean):void {if(this.enabled===enabled)return;this.enabled=enabled;for(const listener of this.modeListeners)listener();}
+  readonly getMode = (): BlockMode => this.enabled ? this.mode : "plain";
   readonly subscribeMode = (listener: () => void): (() => void) => {
     this.modeListeners.add(listener);
     return () => {
@@ -113,6 +116,7 @@ export class GhosttyBlockSession {
     this.focus = null;
     this.paste = null;
     this.keyDown = null;
+    this.acceptSuggestion = null;
     this.draft = "";
     this.modeListeners.clear();
     this.viewportListeners.clear();

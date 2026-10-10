@@ -21,7 +21,9 @@
     "noFallthroughCasesInSwitch": true,
     "types": ["node", "@webgpu/types"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      /* emmet 2.4.11 omits its bundled declarations from package exports. */
+      "emmet": ["./node_modules/emmet/dist/index.d.ts"]
     }
   },
   "include": ["src"],

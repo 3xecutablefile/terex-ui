@@ -1,5 +1,7 @@
 import { terminalReadlineSequence } from "@/modules/terminal/lib/keymap";
-import { readTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
+import { IS_MAC } from "@/lib/platform";
+import { readTerminalPaste } from "@/modules/terminal/lib/terminalClipboard";
+import { isTauri } from "@tauri-apps/api/core";
 import {
   Key,
   KeyAction,
@@ -139,6 +141,7 @@ export type GhosttyInputControllerOptions = {
   readonly onCopy: () => boolean;
   readonly getSelection?: () => string | null;
   readonly onPaste?: (text: string) => boolean;
+  readonly onClipboardError?: (error: unknown) => void;
   readonly onText?: (text: string) => boolean;
   readonly onKeyDown?: (event: KeyboardEvent) => boolean;
   readonly macOptionIsMeta?: boolean;
@@ -158,6 +161,8 @@ export class GhosttyInputController {
   private wheelRemainder = 0;
   private lastMouseMotion: string | null = null;
   private disposed = false;
+  private clipboardPending = false;
+  private clipboardGeneration = 0;
 
   constructor(private readonly options: GhosttyInputControllerOptions) {
     this.isMac = options.isMac ?? /Mac|iPhone|iPad/.test(navigator.userAgent);
@@ -200,6 +205,26 @@ export class GhosttyInputController {
     );
   }
 
+  private async pasteClipboard(): Promise<void> {
+    if (this.disposed || this.clipboardPending) return;
+    this.clipboardPending = true;
+    const generation = this.clipboardGeneration;
+    const alternate = this.options.model.modes().alternateScreen;
+    try {
+      const text = await readTerminalPaste();
+      if (
+        !this.disposed &&
+        generation === this.clipboardGeneration &&
+        alternate === this.options.model.modes().alternateScreen
+      )
+        this.paste(text);
+    } catch (error) {
+      if (!this.disposed) this.options.onClipboardError?.(error);
+    } finally {
+      this.clipboardPending = false;
+    }
+  }
+
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
@@ -234,7 +259,7 @@ export class GhosttyInputController {
 
     if (isPasteShortcut(event, this.isMac)) {
       consume(event);
-      void readTerminalClipboard().then((text) => this.paste(text));
+      void this.pasteClipboard();
       return;
     }
     if (isCopyShortcut(event, this.isMac) && this.options.onCopy()) {
@@ -381,10 +406,13 @@ export class GhosttyInputController {
   };
 
   private readonly handlePaste = (event: ClipboardEvent): void => {
+    const image = Array.from(event.clipboardData?.items ?? []).some((item) =>
+      item.type.startsWith("image/"),
+    );
     const text = event.clipboardData?.getData("text/plain") ?? "";
-    if (!text) return;
     consume(event);
-    this.paste(text);
+    if (isTauri() || image || !text) void this.pasteClipboard();
+    else this.paste(text);
   };
 
   private readonly handleFocus = (): void => {
@@ -394,6 +422,7 @@ export class GhosttyInputController {
   };
 
   private readonly handleBlur = (): void => {
+    this.clipboardGeneration++;
     this.pressedKeys.clear();
     this.composing = false;
     if (this.options.model.modes().focusReporting) {
@@ -612,6 +641,32 @@ export function terminalMouseModifiers(
   if (event.altKey) modifiers |= 8;
   if (event.ctrlKey) modifiers |= 16;
   return modifiers;
+}
+
+export function encodeVirtualKey(
+  model: GhosttyTerminalModelApi,
+  event: KeyboardEvent,
+  text: string,
+): Uint8Array {
+  if (text && event.altKey && (event.ctrlKey || IS_MAC) && !event.metaKey)
+    return new TextEncoder().encode(text);
+  const key = KEY_MAP[event.code];
+  if (key === undefined) return new TextEncoder().encode(text);
+  const data = {
+    key,
+    mods: modifiers(event),
+    unshiftedCodepoint: unshiftedCodepoint(event),
+  };
+  const down = model.encodeKey({
+    ...data,
+    action: KeyAction.PRESS,
+    utf8: text || undefined,
+  });
+  const up = model.encodeKey({ ...data, action: KeyAction.RELEASE });
+  const result = new Uint8Array(down.length + up.length);
+  result.set(down);
+  result.set(up, down.length);
+  return result;
 }
 
 function modifiers(event: KeyboardEvent): Mods {

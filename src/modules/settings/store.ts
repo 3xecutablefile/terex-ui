@@ -159,6 +159,8 @@ export type Preferences = {
   showHidden: boolean;
   explorerGitDecorations: boolean;
   terminalRenderer: "auto" | "webgl";
+  terminalSuggestions: boolean;
+  customTerminalPrompts: boolean;
   terminalScreenReader: boolean;
   terminalCursorBlink: boolean;
   terminalCursorStyle: TerminalCursorStyle;
@@ -255,6 +257,8 @@ const KEY_SHOW_HIDDEN = "showHidden";
 const LEGACY_KEY_SHOW_HIDDEN_DIRS = "showHiddenDirectories";
 const KEY_EXPLORER_GIT_DECORATIONS = "explorerGitDecorations";
 const KEY_TERMINAL_RENDERER = "terminalRenderer";
+const KEY_TERMINAL_SUGGESTIONS = "terminalSuggestions";
+const KEY_CUSTOM_TERMINAL_PROMPTS = "customTerminalPrompts";
 const KEY_TERMINAL_SCREEN_READER = "terminalScreenReader";
 const KEY_TERMINAL_CURSOR_BLINK = "terminalCursorBlink";
 const KEY_TERMINAL_CURSOR_STYLE = "terminalCursorStyle";
@@ -347,6 +351,8 @@ export const DEFAULT_PREFERENCES: Preferences = {
   showHidden: false,
   explorerGitDecorations: true,
   terminalRenderer: "auto",
+  terminalSuggestions: true,
+  customTerminalPrompts: false,
   terminalScreenReader: false,
   terminalCursorBlink: false,
   terminalCursorStyle: "bar",
@@ -374,7 +380,10 @@ export const DEFAULT_PREFERENCES: Preferences = {
   lspCustomServers: [],
 };
 
-const store = new LazyStore(appDataFile(STORE_PATH), { defaults: {}, autoSave: 200 });
+const store = new LazyStore(appDataFile(STORE_PATH), {
+  defaults: {},
+  autoSave: 200,
+});
 
 // LazyStore.onChange only fires within the writing process. The settings
 // page lives in a separate webview, so writes there never reach the main
@@ -505,6 +514,8 @@ export async function loadPreferences(): Promise<Preferences> {
       DEFAULT_PREFERENCES.explorerGitDecorations,
     terminalRenderer:
       get<string>(KEY_TERMINAL_RENDERER) === "webgl" ? "webgl" : "auto",
+    terminalSuggestions: get<boolean>(KEY_TERMINAL_SUGGESTIONS) ?? true,
+    customTerminalPrompts: get<boolean>(KEY_CUSTOM_TERMINAL_PROMPTS) ?? false,
     terminalScreenReader: get<boolean>(KEY_TERMINAL_SCREEN_READER) === true,
     terminalCursorBlink:
       get<boolean>(KEY_TERMINAL_CURSOR_BLINK) ??
@@ -797,6 +808,13 @@ export async function setExplorerGitDecorations(value: boolean): Promise<void> {
   await writePref(KEY_EXPLORER_GIT_DECORATIONS, value);
 }
 
+export async function setTerminalSuggestions(value: boolean): Promise<void> {
+  await writePref(KEY_TERMINAL_SUGGESTIONS, value);
+}
+export async function setCustomTerminalPrompts(value: boolean): Promise<void> {
+  await writePref(KEY_CUSTOM_TERMINAL_PROMPTS, value);
+}
+
 export async function setTerminalRenderer(
   value: "auto" | "webgl",
 ): Promise<void> {
@@ -1001,6 +1019,8 @@ export async function onPreferencesChange(
     [KEY_SHOW_HIDDEN]: "showHidden",
     [KEY_EXPLORER_GIT_DECORATIONS]: "explorerGitDecorations",
     [KEY_TERMINAL_RENDERER]: "terminalRenderer",
+    [KEY_TERMINAL_SUGGESTIONS]: "terminalSuggestions",
+    [KEY_CUSTOM_TERMINAL_PROMPTS]: "customTerminalPrompts",
     [KEY_TERMINAL_SCREEN_READER]: "terminalScreenReader",
     [KEY_TERMINAL_CURSOR_BLINK]: "terminalCursorBlink",
     [KEY_TERMINAL_CURSOR_STYLE]: "terminalCursorStyle",

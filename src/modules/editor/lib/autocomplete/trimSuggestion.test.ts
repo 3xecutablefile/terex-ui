@@ -6,9 +6,45 @@ import {
 } from "./inlineExtension";
 
 describe("trimSuggestion", () => {
+  it("keeps complete HTML blocks and places the existing closing tag on its own line", () => {
+    const body =
+      "\n  <h1>Title</h1>\n  <p>Intro</p>\n  <ul>\n    <li>One</li>\n    <li>Two</li>\n    <li>Three</li>\n  </ul>\n";
+    expect(trimSuggestion(`${body}</section>`, "<section>", "</section>")).toBe(
+      body,
+    );
+    expect(capToLineSuffix(body, "</section>")).toBe(body);
+  });
+  it("keeps multiline completions across language syntaxes", () => {
+    for (const [prefix, suffix, body] of [
+      [
+        "function total(items) {",
+        "}",
+        "\n  let result = 0;\n  for (const item of items) {\n    result += item.price;\n  }\n  return result;\n",
+      ],
+      [
+        "def total(items):\n",
+        "",
+        "    result = 0\n    for item in items:\n        result += item.price\n    return result",
+      ],
+      [
+        "public int Total(int[] items) {",
+        "}",
+        "\n  int result = 0;\n  foreach (var item in items) {\n    result += item;\n  }\n  return result;\n",
+      ],
+    ])
+      expect(
+        trimSuggestion(body, prefix, suffix).split("\n").length,
+      ).toBeGreaterThan(2);
+  });
   it("drops suggestions that echo the recent prefix", () => {
     const prefix = "useEffect(() => {\n  void init();\n}, [init]);";
-    expect(trimSuggestion("useEffect(() => {\n  void init();\n}, [init]);", prefix, "")).toBe("");
+    expect(
+      trimSuggestion(
+        "useEffect(() => {\n  void init();\n}, [init]);",
+        prefix,
+        "",
+      ),
+    ).toBe("");
   });
 
   it("keeps genuinely new code", () => {
@@ -67,9 +103,9 @@ describe("reindentClosers", () => {
   });
 
   it("aligns a closer with its opener line", () => {
-    expect(reindentClosers("() => {\n  run();\n  }", "  ", "  useEffect(")).toBe(
-      "() => {\n  run();\n}",
-    );
+    expect(
+      reindentClosers("() => {\n  run();\n  }", "  ", "  useEffect("),
+    ).toBe("() => {\n  run();\n}");
   });
 
   it("leaves correctly indented suggestions untouched", () => {

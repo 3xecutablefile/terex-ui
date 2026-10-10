@@ -11,6 +11,21 @@ import {
 export type ProviderKeys = Record<ProviderId, string | null>;
 export type CustomEndpointKeys = Record<string, string | null>;
 
+const credentialCache = new Map<string, Promise<string | null>>();
+
+export function clearCredentialCache(): void { credentialCache.clear(); }
+
+function readCredential(account: string): Promise<string | null> {
+  const existing = credentialCache.get(account);
+  if (existing) return existing;
+  const request = invoke<string | null>("secrets_get", { service: KEYRING_SERVICE, account })
+    .then(value => value || null)
+    .catch(() => null);
+  credentialCache.set(account, request);
+  void request.then(value => { if (!value && credentialCache.get(account) === request) credentialCache.delete(account); });
+  return request;
+}
+
 export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
   openai: null,
   anthropic: null,
@@ -29,15 +44,7 @@ export const EMPTY_PROVIDER_KEYS: ProviderKeys = {
 
 export async function getKey(provider: ProviderId): Promise<string | null> {
   if (!providerSupportsKey(provider)) return null;
-  try {
-    const v = await invoke<string | null>("secrets_get", {
-      service: KEYRING_SERVICE,
-      account: getProvider(provider).keyringAccount,
-    });
-    return v && v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
+  return readCredential(getProvider(provider).keyringAccount);
 }
 
 export async function setKey(provider: ProviderId, key: string): Promise<void> {
@@ -51,9 +58,11 @@ export async function setKey(provider: ProviderId, key: string): Promise<void> {
     account: getProvider(provider).keyringAccount,
     password: trimmed,
   });
+  clearCredentialCache();
 }
 
 export async function clearKey(provider: ProviderId): Promise<void> {
+  clearCredentialCache();
   if (!providerSupportsKey(provider)) return;
   try {
     await invoke("secrets_delete", {
@@ -98,21 +107,14 @@ function compatKeyringAccount(endpointId: string): string {
 export async function getCustomEndpointKey(
   endpointId: string,
 ): Promise<string | null> {
-  try {
-    const v = await invoke<string | null>("secrets_get", {
-      service: KEYRING_SERVICE,
-      account: compatKeyringAccount(endpointId),
-    });
-    return v && v.length > 0 ? v : null;
-  } catch {
-    return null;
-  }
+  return readCredential(compatKeyringAccount(endpointId));
 }
 
 export async function setCustomEndpointKey(
   endpointId: string,
   key: string,
 ): Promise<void> {
+  clearCredentialCache();
   const trimmed = key.trim();
   if (!trimmed) throw new Error("API key is empty");
   await invoke("secrets_set", {
@@ -125,6 +127,7 @@ export async function setCustomEndpointKey(
 export async function clearCustomEndpointKey(
   endpointId: string,
 ): Promise<void> {
+  clearCredentialCache();
   try {
     await invoke("secrets_delete", {
       service: KEYRING_SERVICE,

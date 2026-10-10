@@ -1,10 +1,12 @@
 import { endpointIdFromCompatModel } from "@/modules/ai/config";
-import { getCustomEndpointKey, getKey } from "@/modules/ai/lib/keyring";
+import { getCustomEndpointKey } from "@/modules/ai/lib/keyring";
+import { ImagePreview } from "@/modules/editor/ImagePreview";
 import { lspFormatDocument, useLspExtension } from "@/modules/lsp";
 import { usePreferencesStore } from "@/modules/settings/preferences";
-import { onKeysChanged } from "@/modules/settings/store";
 import { acceptCompletion, startCompletion } from "@codemirror/autocomplete";
-import { redo, undo } from "@codemirror/commands";
+import { indentWithTab, redo, undo } from "@codemirror/commands";
+import { openSettingsWindow } from "@/modules/settings/openSettingsWindow";
+import { setAutocompleteEnabled } from "@/modules/settings/store";
 import {
   findNext,
   findPrevious,
@@ -32,6 +34,9 @@ import {
 import { toast } from "sonner";
 import {
   inlineCompletion,
+  acceptSuggestion,
+  dismissSuggestion,
+  type CompletionStatus,
   triggerInlineCompletion,
 } from "./lib/autocomplete/inlineExtension";
 import { diagnosticsReporter } from "./lib/diagnosticsReporter";
@@ -120,6 +125,29 @@ export const EditorPane = memo(
     const adoptDiskTextRef = useRef(adoptDiskText);
     adoptDiskTextRef.current = adoptDiskText;
     const cmRef = useRef<ReactCodeMirrorRef>(null);
+    const [completionStatus, setCompletionStatus] = useState<CompletionStatus>({
+      kind: "idle",
+    });
+    const completionEnabled = usePreferencesStore((s) => s.autocompleteEnabled);
+    const completionEndpoint = usePreferencesStore((s) =>
+      s.autocompleteProvider === "openai-compatible"
+        ? s.customEndpoints.find(
+            (e) =>
+              e.id === endpointIdFromCompatModel(s.autocompleteModelId) &&
+              !!e.baseURL.trim() &&
+              !!e.modelId.trim(),
+          )
+        : undefined,
+    );
+    useEffect(() => {
+      const view = cmRef.current?.view;
+      if (view) dismissSuggestion(view);
+    }, [
+      completionEnabled,
+      completionEndpoint?.id,
+      completionEndpoint?.modelId,
+      completionEndpoint?.baseURL,
+    ]);
     const themeExt = useEditorThemeExt();
     const vimMode = usePreferencesStore((s) => s.vimMode);
     const wordWrapColumn = usePreferencesStore((s) =>
@@ -127,51 +155,8 @@ export const EditorPane = memo(
     );
     const languageRef = useRef<string | null>(null);
     const [langId, setLangId] = useState<string | null>(null);
-    const apiKeyRef = useRef<string | null>(null);
-
-    useEffect(() => {
-      let cancelled = false;
-      const refresh = async () => {
-        const s = usePreferencesStore.getState();
-        const provider = s.autocompleteProvider;
-        if (
-          provider === "lmstudio" ||
-          provider === "mlx" ||
-          provider === "ollama"
-        ) {
-          apiKeyRef.current = null;
-          return;
-        }
-        // OpenAI-compatible keys live in a per-endpoint keyring slot.
-        if (provider === "openai-compatible") {
-          const eid = endpointIdFromCompatModel(s.autocompleteModelId);
-          const k = eid ? await getCustomEndpointKey(eid) : null;
-          if (!cancelled) apiKeyRef.current = k;
-          return;
-        }
-        const k = await getKey(provider);
-        if (!cancelled) apiKeyRef.current = k;
-      };
-      void refresh();
-      let unlistenKeys: (() => void) | undefined;
-      void onKeysChanged(() => void refresh()).then((un) => {
-        if (cancelled) un();
-        else unlistenKeys = un;
-      });
-      const unsubPrefs = usePreferencesStore.subscribe((state, prev) => {
-        if (
-          state.autocompleteProvider !== prev.autocompleteProvider ||
-          state.autocompleteModelId !== prev.autocompleteModelId
-        ) {
-          void refresh();
-        }
-      });
-      return () => {
-        cancelled = true;
-        unlistenKeys?.();
-        unsubPrefs();
-      };
-    }, []);
+    const syntaxEnabled =
+      doc.status === "ready" && doc.size <= SYNTAX_MAX_BYTES;
     // Stabilize save + onSaved via refs so the extensions array never changes
     // identity — a new identity makes @uiw/react-codemirror reconfigure the
     // whole state, wiping the language compartment.
@@ -337,6 +322,12 @@ export const EditorPane = memo(
         // Before inlineCompletion so an open popup wins Tab over the ghost.
         Prec.highest(keymap.of([{ key: "Tab", run: acceptCompletion }])),
         inlineCompletion({
+          getApiKey: (prefs) => {
+            return prefs.endpointId
+              ? getCustomEndpointKey(prefs.endpointId)
+              : Promise.resolve(null);
+          },
+          onStatus: setCompletionStatus,
           getPrefs: () => {
             const s = usePreferencesStore.getState();
             const p = s.autocompleteProvider;
@@ -361,11 +352,15 @@ export const EditorPane = memo(
                         ? s.openrouterModelId
                         : s.autocompleteModelId;
             return {
-              enabled: s.autocompleteEnabled && !!compatEp?.baseURL.trim() && !!compatEp.modelId.trim(),
+              enabled:
+                s.autocompleteEnabled &&
+                !!compatEp?.baseURL.trim() &&
+                !!compatEp.modelId.trim(),
+              endpointId: compatEp?.id,
               trigger: s.autocompleteTrigger,
               provider: p,
               modelId,
-              apiKey: apiKeyRef.current,
+              apiKey: null,
               lmstudioBaseURL: s.lmstudioBaseURL,
               mlxBaseURL: s.mlxBaseURL,
               ollamaBaseURL: s.ollamaBaseURL,
@@ -387,6 +382,7 @@ export const EditorPane = memo(
           },
           { key: "Ctrl-g", run: gotoLine },
         ]),
+        Prec.lowest(keymap.of([indentWithTab])),
       ],
       [],
     );
@@ -445,7 +441,7 @@ export const EditorPane = memo(
         overrideLanguage || (path.split(".").pop()?.toLowerCase() ?? null);
       languageRef.current = ext;
       if (doc.status !== "ready") return;
-      if (doc.size > SYNTAX_MAX_BYTES) {
+      if (!syntaxEnabled) {
         setLangId(null);
         const view = cmRef.current?.view;
         view?.dispatch({ effects: languageCompartment.reconfigure([]) });
@@ -473,7 +469,7 @@ export const EditorPane = memo(
       return () => {
         cancelled = true;
       };
-    }, [path, doc.status, overrideLanguage]);
+    }, [path, doc.status, overrideLanguage, syntaxEnabled]);
 
     useImperativeHandle(
       ref,
@@ -584,20 +580,7 @@ export const EditorPane = memo(
         const assetUrl = convertFileSrc(path);
         return (
           <div className="flex h-full min-h-0 flex-col items-center justify-center bg-background p-4 overflow-auto">
-            {isImage && (
-              <img
-                src={assetUrl}
-                loading="lazy"
-                decoding="async"
-                className="max-w-full max-h-full object-contain rounded-md border border-border shadow-sm"
-                style={{
-                  backgroundImage:
-                    "conic-gradient(var(--muted) 0.25turn, transparent 0.25turn 0.5turn, var(--muted) 0.5turn 0.75turn, transparent 0.75turn)",
-                  backgroundSize: "20px 20px",
-                }}
-                alt={path.split("/").pop()}
-              />
-            )}
+            {isImage && <ImagePreview path={path} />}
             {isVideo && (
               // biome-ignore lint/a11y/useMediaCaption: local media preview opens arbitrary files with no caption track
               <video
@@ -627,7 +610,8 @@ export const EditorPane = memo(
         );
       }
 
-      const canForce = doc.status === "toolarge" && doc.size <= FORCE_READ_LIMIT;
+      const canForce =
+        doc.status === "toolarge" && doc.size <= FORCE_READ_LIMIT;
       return (
         <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center">
           <div className="text-sm text-foreground">
@@ -672,6 +656,66 @@ export const EditorPane = memo(
             searchKeymap: true,
           }}
         />
+        <div
+          className="flex min-h-7 shrink-0 items-center justify-between gap-2 border-t border-border/60 px-3 text-[11px] text-muted-foreground"
+          data-editor-completion-status
+        >
+          <span
+            className="min-w-0 truncate"
+            title={
+              completionStatus.kind === "error"
+                ? completionStatus.message
+                : undefined
+            }
+          >
+            {completionStatus.kind === "error"
+              ? completionStatus.message
+              : completionStatus.kind === "ready"
+                ? "Tab accepts code · Esc dismisses"
+                : completionStatus.kind === "empty"
+                  ? "No code suggestion here. Add context or try again."
+                  : completionEnabled
+                    ? `AI code suggestions${completionEndpoint ? ` · ${completionEndpoint.name}` : " · choose a custom endpoint"}`
+                    : "AI code suggestions are off"}
+          </span>
+          <button
+            type="button"
+            className="shrink-0 rounded px-2 py-1 text-primary hover:bg-accent focus-visible:outline focus-visible:outline-ring disabled:opacity-50"
+            disabled={completionStatus.kind === "loading"}
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => {
+              if (!completionEndpoint) {
+                void openSettingsWindow("models");
+                return;
+              }
+              if (!completionEnabled) {
+                void setAutocompleteEnabled(true);
+                return;
+              }
+              const view = cmRef.current?.view;
+              if (view) {
+                view.focus();
+                if (
+                  completionStatus.kind !== "ready" ||
+                  !acceptSuggestion(view)
+                )
+                  triggerInlineCompletion(view);
+              }
+            }}
+          >
+            {!completionEndpoint
+              ? "Choose AI model"
+              : !completionEnabled
+                ? "Enable AI suggestions"
+                : completionStatus.kind === "loading"
+                  ? "Generating…"
+                  : completionStatus.kind === "ready"
+                    ? "Accept suggestion"
+                    : completionStatus.kind === "error"
+                      ? "Retry AI"
+                      : "Generate code"}
+          </button>
+        </div>
       </div>
     );
   }),

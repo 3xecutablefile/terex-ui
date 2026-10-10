@@ -9,9 +9,11 @@ import {
   subscribeWindowPresentation,
   terminalWindowPresentation,
 } from "@/modules/terminal/ghostty/windowPresentation";
-import { useWorkspaceEnvStore } from "@/modules/workspace";
+import { useWorkspaceEnvStore, currentWorkspaceEnv } from "@/modules/workspace";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { invoke } from "@tauri-apps/api/core";
+import { homeDir } from "@tauri-apps/api/path";
+import { toast } from "sonner";
 import {
   type ReactNode,
   useCallback,
@@ -307,6 +309,20 @@ function FileColumn({
 
 export function Commander({ files }: { files: DesktopFiles }) {
   const { path, current, parent, selected, preview } = files;
+  const [address, setAddress] = useState(path ?? "");
+  useEffect(() => setAddress(path ?? ""), [path]);
+  const openAddress = async () => {
+    try {
+      let target=address.trim();
+      if (!target) return;
+      if (target === "~" || target.startsWith("~/")) target=joinPath(await homeDir(),target.slice(2));
+      else if (!/^(?:\/|[A-Za-z]:[\\/]|\\\\)/.test(target)) target=joinPath(path??"/",target);
+      target=await invoke<string>("fs_canonicalize",{path:target,workspace:currentWorkspaceEnv()});
+      const stat=await invoke<{kind:"file"|"dir"|"symlink";size:number;mtime:number}>("fs_stat",{path:target,workspace:currentWorkspaceEnv()});
+      if(stat.kind==="dir") files.navigate(target);
+      else void files.open({name:target.split(/[\\/]/).pop()??target,...stat,gitignored:false},parentPath(target));
+    }catch(e){toast.error(String(e));}
+  };
   const [highlight, setHighlight] = useState<{
     base: string | null;
     name: string;
@@ -322,6 +338,11 @@ export function Commander({ files }: { files: DesktopFiles }) {
           <button
             type="button"
             key={entry.name}
+            data-file-path={joinPath(base ?? "/",entry.name)}
+            data-file-base={base ?? "/"}
+            data-file-name={entry.name}
+            data-file-kind={entry.kind}
+            aria-pressed={side === "current" && entry.name === selected?.name}
             className={`terex-file-row ${(side === "current" && entry.name === selected?.name) || (highlight?.base === base && highlight?.name === entry.name) || (side === "parent" && path && joinPath(base ?? "/", entry.name) === path.replace(/\/$/, "")) ? "selected" : ""} ${entry.kind === "dir" ? "is-directory" : ""}`}
             onFocus={() => {
               if (side === "current") files.select(entry.name);
@@ -348,6 +369,10 @@ export function Commander({ files }: { files: DesktopFiles }) {
                 event.preventDefault();
                 moveFocus(index - 1);
               }
+              if (event.key === "Home") {event.preventDefault();moveFocus(0);}
+              if (event.key === "End") {event.preventDefault();moveFocus(entries.length-1);}
+              if (event.key === "PageDown") {event.preventDefault();moveFocus(index+20);}
+              if (event.key === "PageUp") {event.preventDefault();moveFocus(index-20);}
             }}
           >
             <span className="terex-file-mark">
@@ -370,7 +395,7 @@ export function Commander({ files }: { files: DesktopFiles }) {
     <div className="terex-commander">
       <div className="terex-pathline">
         <span className="terex-path-user">LOCAL</span>
-        <span title={path ?? ""}>{path ?? "Opening workspace…"}</span>
+        <input aria-label="Directory path" value={address} onChange={e=>setAddress(e.target.value)} onFocus={e=>e.target.select()} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void openAddress();}if(e.key==="Escape")setAddress(path??"");}} />
         <button
           type="button"
           onClick={files.reload}

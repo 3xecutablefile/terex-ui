@@ -5,14 +5,12 @@ import {
   ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { IS_MAC } from "@/lib/platform";
-import { WorkspaceVisibility } from "@/lib/workspaceVisibility";
-import {
-  Commander,
-  FileActions,
-  useDesktopFiles,
-} from "@/modules/desktop/Files";
-import { Keyboard } from "@/modules/desktop/Keyboard";
+import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
+import { WindowControls } from "@/components/WindowControls";
+import { WorkspaceVisibility, OpenFilesView } from "@/lib/workspaceVisibility";
+import { Commander, useDesktopFiles } from "@/modules/desktop/Files";
+import { FilesMenu, type FileMenuActions } from "@/modules/desktop/FilesMenu";
+import { Keyboard, type VirtualKey } from "@/modules/desktop/Keyboard";
 import { bytes } from "@/modules/desktop/model";
 import {
   NetworkRail,
@@ -31,7 +29,8 @@ type Props = {
   terminalActive: boolean;
   zen: boolean;
   aiOpen: boolean;
-  onInput: (value: string) => void;
+  onKey: (key: VirtualKey) => void;
+  onAccept: (run: boolean) => boolean;
   onOpenFile: (path: string) => void;
   onTerminal: (path: string) => void;
   onNavigate: (path: string) => Promise<void>;
@@ -42,6 +41,10 @@ type Props = {
   onAttach: (path: string) => void;
   onSettings: () => void;
   onCommands: () => void;
+  fileActions: Pick<
+    FileMenuActions,
+    "onSourceControl" | "onHistory" | "onDeleted"
+  >;
 };
 
 export function Desktop(props: Props) {
@@ -102,13 +105,10 @@ export function Desktop(props: Props) {
           onContextMenuCapture={() => setSelection(props.getSelection())}
         >
           <div
-            className={`terex-topline ${IS_MAC ? "has-native-controls" : ""}`}
+            className={`terex-topline ${IS_MAC ? "has-native-controls" : ""} ${USE_CUSTOM_WINDOW_CONTROLS ? "has-custom-controls" : ""}`}
             data-tauri-drag-region
           >
             <strong>TEREX UI</strong>
-            <span className="terex-topline-subtitle">
-              NATIVE INTELLIGENCE CONSOLE
-            </span>
             <nav aria-label="Workspace views">
               <button
                 type="button"
@@ -124,16 +124,6 @@ export function Desktop(props: Props) {
               >
                 WORKSPACE
               </button>
-              <button
-                type="button"
-                aria-pressed={props.aiOpen}
-                onClick={() => {
-                  setFileMode(false);
-                  props.onAi();
-                }}
-              >
-                AI AGENT
-              </button>
               <button type="button" onClick={props.onCommands}>
                 COMMANDS
               </button>
@@ -141,14 +131,7 @@ export function Desktop(props: Props) {
                 CONFIG
               </button>
             </nav>
-            <span className="terex-native-status">
-              <i />
-              {telemetry.error
-                ? "NATIVE / UNAVAILABLE"
-                : telemetry.snapshot
-                  ? "NATIVE / CONNECTED"
-                  : "NATIVE / CONNECTING"}
-            </span>
+            <WindowControls />
           </div>
           <div className="terex-top-deck">
             {!props.zen && <SystemRail {...telemetry} />}
@@ -161,7 +144,9 @@ export function Desktop(props: Props) {
                 inert={fileMode && !props.zen}
               >
                 <WorkspaceVisibility.Provider value={!fileMode || props.zen}>
-                  {props.children}
+                  <OpenFilesView.Provider value={() => setFileMode(true)}>
+                    {props.children}
+                  </OpenFilesView.Provider>
                 </WorkspaceVisibility.Provider>
               </div>
               {fileMode && !props.zen && (
@@ -193,16 +178,27 @@ export function Desktop(props: Props) {
                       CONFIG
                     </button>
                   </div>
-                  <FileActions
+                  <FilesMenu
                     files={files}
-                    terminalActive={props.terminalActive}
-                    onAttach={props.onAttach}
-                    onTerminal={(path) => {
-                      setFileMode(false);
-                      props.onTerminal(path);
+                    actions={{
+                      onTerminal: (path) => {
+                        setFileMode(false);
+                        props.onTerminal(path);
+                      },
+                      onSourceControl: (path) => {
+                        setFileMode(false);
+                        props.fileActions.onSourceControl(path);
+                      },
+                      onHistory: (path) => {
+                        setFileMode(false);
+                        props.fileActions.onHistory(path);
+                      },
+                      onAttach: props.onAttach,
+                      onDeleted: props.fileActions.onDeleted,
                     }}
-                  />
-                  <Commander files={files} />
+                  >
+                    <Commander files={files} />
+                  </FilesMenu>
                 </div>
               )}
             </div>
@@ -212,9 +208,14 @@ export function Desktop(props: Props) {
             <div className="terex-bottom-deck">
               <Keyboard
                 disabled={!props.terminalActive}
-                onInput={(value) => {
+                onKey={(value) => {
                   setFileMode(false);
-                  props.onInput(value);
+                  props.onKey(value);
+                }}
+                onAccept={(run) => {
+                  const accepted = props.onAccept(run);
+                  if (accepted) setFileMode(false);
+                  return accepted;
                 }}
               />
             </div>
@@ -232,8 +233,7 @@ export function Desktop(props: Props) {
                   ? `${bytes(disk.available)} AVAILABLE`
                   : "NATIVE FILESYSTEM"}
               </span>
-              <span>GHOSTTY / RUST / AI</span>
-              <span>TEREX UI v0.9</span>
+              <span>TEREX UI</span>
             </footer>
           )}
         </div>

@@ -6,6 +6,8 @@ import {
   GhosttyInputController,
   terminalMouseModifiers,
 } from "./GhosttyInputController";
+const clipboard = vi.hoisted(() => ({ readTerminalPaste: vi.fn() }));
+vi.mock("@/modules/terminal/lib/terminalClipboard", () => clipboard);
 
 describe("terminalMouseModifiers", () => {
   it("encodes xterm Shift, Alt, and Control bits", () => {
@@ -26,6 +28,93 @@ describe("terminalMouseModifiers", () => {
 });
 
 describe("GhosttyInputController", () => {
+  it("routes keyboard and image-only menu paste as one bracketed image path", async () => {
+    const input = new FakeTextArea();
+    const onData = vi.fn();
+    const model = inputModel();
+    const controller = new GhosttyInputController({
+      model: {
+        ...model,
+        modes: () => ({
+          ...model.modes(),
+          alternateScreen: true,
+          bracketedPaste: true,
+        }),
+      },
+      input: input as unknown as HTMLTextAreaElement,
+      pointerTarget: new FakeElement() as unknown as HTMLElement,
+      cellSize: () => ({ width: 10, height: 20 }),
+      isMac: true,
+      onCopy: () => false,
+      onData,
+    });
+    try {
+      clipboard.readTerminalPaste.mockResolvedValue("/tmp/paste-fixture.png ");
+      const key = keyboardEvent({ key: "v", code: "KeyV", metaKey: true });
+      input.dispatchEvent(key);
+      expect(key.defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(onData).toHaveBeenCalledTimes(1));
+      expect(new TextDecoder().decode(onData.mock.calls[0][0])).toBe(
+        "\x1b[200~/tmp/paste-fixture.png \x1b[201~",
+      );
+      const event = Object.assign(new Event("paste", { cancelable: true }), {
+        clipboardData: { items: [{ type: "image/png" }], getData: () => "" },
+      });
+      input.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      await vi.waitFor(() => expect(onData).toHaveBeenCalledTimes(2));
+      expect(new TextDecoder().decode(onData.mock.calls[1][0])).toBe(
+        "\x1b[200~/tmp/paste-fixture.png \x1b[201~",
+      );
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it("drops a pending paste after focus moves and reports encoding failures", async () => {
+    const input = new FakeTextArea(),
+      onData = vi.fn(),
+      onClipboardError = vi.fn();
+    const controller = new GhosttyInputController({
+      model: inputModel(),
+      input: input as unknown as HTMLTextAreaElement,
+      pointerTarget: new FakeElement() as unknown as HTMLElement,
+      cellSize: () => ({ width: 10, height: 20 }),
+      isMac: true,
+      onCopy: () => false,
+      onData,
+      onClipboardError,
+    });
+    try {
+      let resolve: (value: string) => void = () => {
+        throw new Error("Clipboard read did not start");
+      };
+      clipboard.readTerminalPaste.mockImplementationOnce(
+        () =>
+          new Promise<string>((done) => {
+            resolve = done;
+          }),
+      );
+      input.dispatchEvent(
+        keyboardEvent({ key: "v", code: "KeyV", metaKey: true }),
+      );
+      input.dispatchEvent(new Event("blur"));
+      resolve("/tmp/stale.png ");
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(onData).not.toHaveBeenCalled();
+      clipboard.readTerminalPaste.mockRejectedValueOnce(
+        new Error("PNG write failed"),
+      );
+      input.dispatchEvent(
+        keyboardEvent({ key: "v", code: "KeyV", metaKey: true }),
+      );
+      await vi.waitFor(() => expect(onClipboardError).toHaveBeenCalledTimes(1));
+      expect(onData).not.toHaveBeenCalled();
+    } finally {
+      controller.dispose();
+    }
+  });
   it.each(["ghostty-vt.wasm", "ghostty-vt-scalar.wasm"])(
     "leaves macOS Command shortcuts to the application in legacy and Kitty modes (%s)",
     async (artifact) => {

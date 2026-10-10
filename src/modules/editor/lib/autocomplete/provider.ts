@@ -15,6 +15,7 @@ import {
 } from "./prompt";
 
 export type CompletionDeps = {
+  endpointId?: string;
   provider: AutocompleteProviderId;
   modelId: string;
   apiKey: string | null;
@@ -24,11 +25,11 @@ export type CompletionDeps = {
   openaiCompatibleBaseURL?: string;
 };
 
-const MAX_OUTPUT_TOKENS_DEFAULT = 128;
+const MAX_OUTPUT_TOKENS_DEFAULT = 1024;
 // Reasoning models burn output tokens on internal thought before producing
 // any visible content; with a tight cap they finish_reason="length" with
 // empty text. The trim step still caps visible output at MAX_LINES.
-const MAX_OUTPUT_TOKENS_REASONING = 1024;
+const MAX_OUTPUT_TOKENS_REASONING = 4096;
 
 export async function requestCompletion(
   req: CompletionRequest,
@@ -48,33 +49,42 @@ export async function requestCompletion(
     openaiCompatibleBaseURL: deps.openaiCompatibleBaseURL,
   });
 
-  const isReasoning = modelUsesReasoningTokens(deps.provider, modelId);
+  const isReasoning =
+    modelUsesReasoningTokens(deps.provider, modelId) ||
+    /(?:^|\/)(?:gpt-[5-9]|o[134](?:[-.]|$))/.test(modelId);
+  const custom = deps.provider === "openai-compatible";
   const providerOptions = isReasoning
     ? {
         anthropic: { effort: "low" },
         cerebras: { reasoningEffort: "low" },
         groq: { reasoningEffort: "low" },
         openai: { reasoningEffort: "low" },
+        "openai-compatible": { reasoningEffort: "low" },
         xai: { reasoningEffort: "low" },
       }
     : undefined;
 
-  const { text } = await generateText({
+  const { text, finishReason } = await generateText({
     model,
     system: COMPLETION_SYSTEM_PROMPT,
     prompt: buildUserPrompt(req),
-    maxOutputTokens: isReasoning
-      ? MAX_OUTPUT_TOKENS_REASONING
-      : MAX_OUTPUT_TOKENS_DEFAULT,
+    maxOutputTokens:
+      isReasoning || custom
+        ? MAX_OUTPUT_TOKENS_REASONING
+        : MAX_OUTPUT_TOKENS_DEFAULT,
     maxRetries: 0,
     abortSignal: signal,
-    ...(modelSupportsTemperature(deps.provider, modelId)
+    ...(!custom && modelSupportsTemperature(deps.provider, modelId)
       ? { temperature: 0.1 }
       : {}),
     ...(providerOptions ? { providerOptions } : {}),
   });
 
-  return cleanCompletion(text);
+  if (!text.trim() && finishReason === "length")
+    throw new Error(
+      "The model exhausted its completion budget without producing code. Select a faster code-completion model.",
+    );
+  return cleanCompletion(text.replace(/\r\n?/g, "\n"));
 }
 
 function cleanCompletion(raw: string): string {

@@ -47,7 +47,6 @@ import {
   isCompatModelId,
   providerNeedsKey,
   PROVIDERS,
-  STT_PROVIDER_LABELS,
   type ModelCapabilities,
   type ModelInfo,
   type ProviderId,
@@ -76,24 +75,6 @@ const PROVIDER_ICON = {
   mlx: AppleIcon,
   ollama: ServerStack01Icon,
 } as const satisfies Record<ProviderId, typeof ChatGptIcon>;
-
-export function AiOpenButton({ onOpen }: { onOpen: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className={cn(
-        "flex h-6 items-center gap-1.5 rounded-md border border-border/60 bg-card px-2 text-xs",
-        "text-muted-foreground transition-colors hover:border-border hover:bg-accent hover:text-foreground",
-        "animate-in slide-in-from-top-2 duration-200 ease-out",
-      )}
-      title="Open AI agent"
-    >
-      <span>Open AI agent</span>
-      <Kbd className="h-4 min-w-4 px-1">{fmtShortcut(MOD_KEY, "I")}</Kbd>
-    </button>
-  );
-}
 
 export function AiStatusBarControls() {
   const c = useComposer();
@@ -127,18 +108,16 @@ export function AiStatusBarControls() {
       {c.voice.supported && (
         <IconBtn
           title={
-            !c.voice.hasKey
-              ? `Voice needs a ${STT_PROVIDER_LABELS[c.voice.sttProvider]} key`
-              : c.voice.recording
-                ? "Stop & transcribe"
-                : c.voice.transcribing
-                  ? "Transcribing…"
-                  : "Voice input"
+            c.voice.recording
+              ? "Stop & transcribe"
+              : c.voice.transcribing
+                ? "Transcribing…"
+                : "Voice input"
           }
           onClick={() =>
             c.voice.recording ? c.voice.stop() : void c.voice.start()
           }
-          disabled={c.isBusy || c.voice.transcribing || !c.voice.hasKey}
+          disabled={c.isBusy || c.voice.transcribing || !c.voice.supported}
           className={cn(
             c.voice.recording &&
               "bg-destructive/10 text-destructive hover:bg-destructive/15",

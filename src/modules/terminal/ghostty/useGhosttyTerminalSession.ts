@@ -16,6 +16,8 @@ import { useTerminalFont } from "@/modules/terminal/lib/useTerminalFont";
 import type { TerminalSearchController } from "@/modules/terminal/search/TerminalSearchController";
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+import { setTerminalBusy } from "@/modules/terminal/lib/terminalActivity";
 import { openPty, type PtySession } from "../lib/pty-bridge";
 import { writeTerminalClipboard } from "../lib/terminalClipboard";
 import { LatestClipboardWrite } from "@/modules/terminal/lib/LatestClipboardWrite";
@@ -30,7 +32,10 @@ import {
 } from "./gpu/terminalVisuals";
 import { getWebGpuTerminalRuntime } from "./gpu/WebGpuTerminalRuntime";
 import { WebGpuTerminalSurface } from "./gpu/WebGpuTerminalSurface";
-import { GhosttyInputController } from "./input/GhosttyInputController";
+import {
+  GhosttyInputController,
+  encodeVirtualKey,
+} from "./input/GhosttyInputController";
 import { encodeTerminalSubmission } from "./input/terminalInputEncoding";
 import type {
   WebGlTerminalSurface,
@@ -164,7 +169,14 @@ export function useGhosttyTerminalSession({
       initialCwdRef.current,
       fontRef.current,
     );
-    if (blocks) ensureGhosttyBlocks(leafId);
+    const blockState = blocks
+      ? ensureGhosttyBlocks(leafId)
+      : ghosttyBlocks(leafId);
+    blockState?.setEnabled(blocks);
+    if (blocks && session.model && blockState && !blockState.model)
+      void blockState.attach(session.model, () =>
+        session.surface?.requestFrame(),
+      );
     const node = container.current;
     session.container = node;
     setModel(session.model);
@@ -298,6 +310,20 @@ export function writeToGhosttySession(leafId: number, data: string): boolean {
   return accepted;
 }
 
+export function dispatchGhosttyKey(
+  leafId: number,
+  event: KeyboardEvent,
+  text: string,
+): boolean {
+  const session = sessions.get(leafId);
+  if (!session?.model || session.shellExited || session.disposed) return false;
+  const bytes = encodeVirtualKey(session.model, event, text);
+  const accepted = bytes.length > 0 && session.writer.enqueue(bytes);
+  if (accepted)
+    session.directorySync = directorySyncState(session.directorySync, "input");
+  return accepted;
+}
+
 export async function changeGhosttyDirectory(
   leafId: number,
   path: string,
@@ -312,13 +338,17 @@ export async function changeGhosttyDirectory(
   const canSync = () =>
     session.directorySync === "ready" && !ghosttyBlocks(leafId)?.draft;
   if (!canSync())
-    throw new Error("Finish or clear the current terminal input before syncing this folder.");
+    throw new Error(
+      "Finish or clear the current terminal input before syncing this folder.",
+    );
   const busy = await invoke<boolean>("pty_has_foreground_process", {
     id: session.pty.id,
   });
   if (
-    busy !== false || !canSync() ||
-    session.generation !== generation || session.disposed
+    busy !== false ||
+    !canSync() ||
+    session.generation !== generation ||
+    session.disposed
   ) {
     throw new Error("Terminal is busy; its directory was not changed.");
   }
@@ -447,6 +477,7 @@ export function disposeGhosttySession(leafId: number): boolean {
   void session.pty?.close();
   session.pty = null;
   sessions.delete(leafId);
+  setTerminalBusy(leafId, false);
   return true;
 }
 
@@ -474,6 +505,7 @@ export async function respawnGhosttySession(
   session.shellExited = false;
   session.lastCwd = null;
   session.directorySync = "unknown";
+  setTerminalBusy(leafId, false);
   session.initialCwd = cwd ?? session.initialCwd;
   session.startupError = null;
   session.rendererError = null;
@@ -677,6 +709,7 @@ async function initializeSessionGeneration(
   ]);
   if (!alive()) return;
 
+  let commandRunning = false;
   const semanticEvents = new GhosttySemanticEventRouter({
     onCwd: (cwd) => {
       if (session.lastCwd === cwd) return;
@@ -692,6 +725,7 @@ async function initializeSessionGeneration(
       );
     },
     onCommandState: (running) => {
+      if (running) commandRunning = true;
       if (!running) mark("firstPromptMs");
     },
   });
@@ -711,8 +745,10 @@ async function initializeSessionGeneration(
     },
     onReply: (bytes) => session.writer.enqueue(bytes),
     onEvent: (event) => {
+      if (event.type === "prompt-end") commandRunning = false;
       session.directorySync = directorySyncState(
-        session.directorySync, event.type,
+        session.directorySync,
+        event.type,
       );
       semanticEvents.handle(event);
       ghosttyBlocks(session.leafId)?.controller?.handle(
@@ -841,6 +877,10 @@ async function initializeSessionGeneration(
         if (!session.disposed && generation === session.generation) {
           mark("firstOutputMs");
           model.write(bytes);
+          setTerminalBusy(
+            session.leafId,
+            commandRunning || model.modes().alternateScreen,
+          );
           ghosttyBlocks(session.leafId)?.changed();
           applyBlockInputMode(session);
         }
@@ -848,6 +888,7 @@ async function initializeSessionGeneration(
       onExit: (code) => {
         if (session.disposed || generation !== session.generation) return;
         session.shellExited = true;
+        setTerminalBusy(session.leafId, true);
         session.writer.detach();
         session.pty = null;
         session.callbacks.onExit?.(code);
@@ -900,7 +941,10 @@ function createGhosttyInput(
       )
         return;
       if (session.writer.enqueue(bytes))
-        session.directorySync = directorySyncState(session.directorySync, "input");
+        session.directorySync = directorySyncState(
+          session.directorySync,
+          "input",
+        );
     },
     onKeyDown: (event) => {
       const blocks = ghosttyBlocks(session.leafId);
@@ -910,6 +954,8 @@ function createGhosttyInput(
     },
     onText: insertPromptText,
     onPaste: insertPromptText,
+    onClipboardError: (error) =>
+      toast.error(`Paste failed: ${toError(error).message}`),
     getSelection: () => surface.getSelection(),
     onCopy: () => {
       const text = surface.getSelection();

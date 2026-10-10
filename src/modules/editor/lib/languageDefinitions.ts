@@ -22,6 +22,19 @@ async function defineLanguage(
   return StreamLanguage.define(resolvedParser);
 }
 
+async function loadHtml(selfClosingTags = false): Promise<Extension> {
+  const [html, css, emmet] = await Promise.all([
+    import("@codemirror/lang-html"),
+    import("@codemirror/lang-css"),
+    import("./emmet"),
+  ]);
+  return [
+    html.html({ selfClosingTags }),
+    emmet.emmetExtension(html.htmlLanguage, "html"),
+    emmet.emmetExtension(css.cssLanguage, "css"),
+  ];
+}
+
 export const LANGUAGES: LanguageDefinition[] = [
   {
     name: "JavaScript",
@@ -167,21 +180,21 @@ export const LANGUAGES: LanguageDefinition[] = [
   {
     name: "HTML",
     extensions: ["html", "htm", "twig"],
-    loader: () => import("@codemirror/lang-html").then((m) => m.html()),
+    loader: () => loadHtml(),
     userSelectable: true,
   },
   {
     name: "Astro",
     extensions: ["astro"],
-    loader: () =>
-      import("@codemirror/lang-html").then((m) =>
-        m.html({ selfClosingTags: true }),
-      ),
+    loader: () => loadHtml(true),
   },
   {
     name: "CSS",
     extensions: ["css"],
-    loader: () => import("@codemirror/lang-css").then((m) => m.css()),
+    loader: () =>
+      Promise.all([import("@codemirror/lang-css"), import("./emmet")]).then(
+        ([m, emmet]) => [m.css(), emmet.emmetExtension(m.cssLanguage, "css")],
+      ),
     userSelectable: true,
   },
   {

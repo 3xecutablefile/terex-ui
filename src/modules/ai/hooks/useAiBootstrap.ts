@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { firePendingReviewForSession } from "@/modules/agents/lib/review";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { onKeysChanged } from "@/modules/settings/store";
@@ -6,7 +6,7 @@ import {
   endpointModelId,
   endpointModels,
 } from "@/modules/ai/lib/endpointModels";
-import { getAllCustomEndpointKeys, getAllKeys } from "../lib/keyring";
+import { clearCredentialCache, EMPTY_PROVIDER_KEYS } from "../lib/keyring";
 import { useAgentsStore } from "../store/agentsStore";
 import { useChatStore } from "../store/chatStore";
 import { useSnippetsStore } from "../store/snippetsStore";
@@ -35,28 +35,17 @@ export function useAiBootstrap(): {
   const hasComposer = endpointModels(customEndpoints).length > 0;
 
   const prefsHydrated = usePreferencesStore((s) => s.hydrated);
-  const [keysLoaded, setKeysLoaded] = useState(false);
   useEffect(() => {
-    let alive = true;
     const reload = () => {
-      void getAllKeys().then((keys) => {
-        if (!alive) return;
-        setApiKeys(keys);
-        setKeysLoaded(true);
-      });
-      if (!prefsHydrated) return;
-      void getAllCustomEndpointKeys(customEndpoints).then((epKeys) => {
-        if (!alive) return;
-        setCustomEndpointKeys(epKeys);
-      });
+      clearCredentialCache();
+      setApiKeys({ ...EMPTY_PROVIDER_KEYS });
+      setCustomEndpointKeys({});
     };
-    reload();
     const unlistenP = onKeysChanged(reload);
     return () => {
-      alive = false;
       void unlistenP.then((fn) => fn());
     };
-  }, [setApiKeys, setCustomEndpointKeys, prefsHydrated, customEndpoints]);
+  }, [setApiKeys, setCustomEndpointKeys]);
 
   // Hydrate the cross-window preference store and mirror the default model
   // into chatStore so the dropdown reflects what the user picked in Settings.
@@ -76,5 +65,5 @@ export function useAiBootstrap(): {
     void useSnippetsStore.getState().hydrate();
   }, [hydrateSessions]);
 
-  return { hasComposer, keysLoaded };
+  return { hasComposer, keysLoaded: prefsHydrated };
 }

@@ -2,6 +2,7 @@ import type { BlockMode } from "@/modules/terminal/block/lib/modeMachine";
 import {
   clearGhosttySession,
   changeGhosttyDirectory,
+  dispatchGhosttyKey,
   disposeGhosttySession,
   focusGhosttySession,
   ghosttyFocusedLeaf,
@@ -114,6 +115,26 @@ export function setLeafInputKeyDown(
 ): void {
   const state = handler ? ensureGhosttyBlocks(leafId) : ghosttyBlocks(leafId);
   if (state) state.keyDown = handler;
+}
+
+export function setLeafSuggestionAccept(leafId:number,accept:((run:boolean)=>boolean)|null):void {
+  const state=accept?ensureGhosttyBlocks(leafId):ghosttyBlocks(leafId);
+  if(state)state.acceptSuggestion=accept;
+}
+
+export function acceptTerminalSuggestion(leafId:number,run:boolean):boolean {
+  const state=ghosttyBlocks(leafId);
+  return state?.getMode()==="prompt" ? state.acceptSuggestion?.(run)??false:false;
+}
+
+export function dispatchTerminalKey(leafId:number,event:KeyboardEvent,text:string):boolean {
+  const state=ghosttyBlocks(leafId);
+  if(state?.getMode()==="prompt") {
+    if(state.keyDown?.(event))return true;
+    if(text&&!event.metaKey&&(!event.ctrlKey||event.altKey)&&state.paste){state.paste(text);return true;}
+    return false;
+  }
+  return dispatchGhosttyKey(leafId,event,text);
 }
 
 export function focusLeafInput(leafId: number): void {

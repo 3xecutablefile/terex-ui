@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useUpdater } from "@/modules/updater";
+import { requestUpdateCheck } from "@/modules/updater";
 import { GithubIcon, Globe02Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { getName, getVersion } from "@tauri-apps/api/app";
@@ -24,31 +24,10 @@ export function AboutSection() {
   const [version, setVersion] = useState("");
   const [name, setName] = useState("Terex UI");
   const [build, setBuild] = useState("");
-  const { status, check, install } = useUpdater({ autoCheck: false });
-  const checking = status.kind === "checking";
-  const downloading = status.kind === "downloading";
-  const available = status.kind === "available";
-  const manualAvailable = status.kind === "manual-available";
-  const ready = status.kind === "ready";
-  const checkLabel =
-    status.kind === "uptodate"
-      ? "You're up to date"
-      : status.kind === "error"
-        ? "Check failed — retry"
-        : checking
-          ? "Checking…"
-          : downloading
-            ? "Downloading…"
-            : ready
-              ? "Restart to install"
-              : available
-                ? `Install v${status.update.version}`
-                : manualAvailable
-                  ? `Update to v${status.info.version}`
-                  : "Check for updates";
+  const [updateError, setUpdateError] = useState("");
   const onUpdateClick = () => {
-    if (available) void install();
-    else void check({ manual: true });
+    setUpdateError("");
+    void requestUpdateCheck().catch((error) => setUpdateError(String(error)));
   };
 
   useEffect(() => {
@@ -69,7 +48,12 @@ export function AboutSection() {
       <SectionHeader title="About" description="" />
 
       <div className="flex items-center gap-4 rounded-xl border border-border/60 bg-card/60 p-5">
-        <img src="/terex-mark.svg" alt="" className="size-12" draggable={false} />
+        <img
+          src="/terex-mark.svg"
+          alt=""
+          className="size-12"
+          draggable={false}
+        />
         <div className="flex min-w-0 flex-col">
           <span className="text-[15px] font-semibold tracking-tight">
             {name}
@@ -90,7 +74,9 @@ export function AboutSection() {
         </dd>
 
         <dt className="text-muted-foreground">Bundle ID</dt>
-        <dd className="font-mono text-[11.5px]">io.github.3xecutablefile.terex-ui</dd>
+        <dd className="font-mono text-[11.5px]">
+          io.github.3xecutablefile.terex-ui
+        </dd>
 
         <dt className="text-muted-foreground">License</dt>
         <dd>Apache 2.0</dd>
@@ -121,12 +107,8 @@ export function AboutSection() {
 
       <div className="flex flex-col gap-1.5">
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            onClick={onUpdateClick}
-            disabled={checking || downloading || ready}
-          >
-            {checkLabel}
+          <Button size="sm" onClick={onUpdateClick}>
+            Check for updates
           </Button>
           <Button
             variant="outline"
@@ -145,20 +127,11 @@ export function AboutSection() {
             Report an issue
           </Button>
         </div>
-        {status.kind === "error" && (
+        {updateError && (
           <p className="font-mono text-[10.5px] break-all text-destructive/80">
-            {status.message}
+            {updateError}
           </p>
         )}
-        {downloading && status.contentLength ? (
-          <p className="text-[11px] text-muted-foreground">
-            {Math.min(
-              100,
-              Math.round((status.downloaded / status.contentLength) * 100),
-            )}
-            %
-          </p>
-        ) : null}
       </div>
     </div>
   );

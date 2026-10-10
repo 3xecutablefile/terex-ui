@@ -31,9 +31,21 @@ after successful pushes to `main`:
 | Linux x64 | AppImage, DEB, RPM |
 | Windows x64 | EXE, MSI |
 
-Each release includes `SHA256SUMS`. Builds are unsigned and macOS builds are not
-notarized. Automatic in-app updating is disabled for these unsigned builds.
+Each release includes `SHA256SUMS` and signed updater metadata. macOS app bundles
+use ad-hoc signing and are not notarized; Windows installers lack Authenticode signing.
 The packaged desktop app does not require Node.js or pnpm to run.
+
+### Automatic Updates
+
+macOS, Windows, and Linux AppImage builds check for updates automatically while
+the window is visible, at most every 30 minutes. New packages download in the
+background and their signature and signed version are verified before use.
+Choose **Review update → Install & restart** when ready. Installation waits until
+edited files are saved and running terminal commands and drafts are finished.
+**CONFIG → About → Check for updates** opens the same updater manually.
+
+DEB/RPM installations use their package manager instead. Existing builds that
+predate the updater need one manual installation of version 0.10.0 or later.
 
 ## Workspace
 
@@ -44,15 +56,16 @@ The packaged desktop app does not require Node.js or pnpm to run.
   running commands are preserved; **Sync terminal** retries once the prompt is ready.
 - **WORKSPACE:** GPU-rendered Ghostty terminals, persistent tabs, split panes,
   code editing, source control, and web previews.
-- **AI AGENT:** chat, project context, attachments, voice, and approval-gated
+- **AI:** chat, project context, attachments, voice, and approval-gated
   tools. Chat and autocomplete pickers show configured custom-endpoint models.
-- **TERMINAL HERE:** starts a shell in the browsed directory.
-- **ATTACH TO AI:** adds the selected file to the agent composer.
+- **Files context menu:** opens a terminal in the chosen directory, creates or
+  deletes entries, copies paths, and attaches files to the agent.
 - **CONFIG:** endpoint settings, themes, editor preferences, shortcuts, and agents.
 
 Shells and filesystem operations run through Rust. CPU, memory, process, disk,
-and interface counters come from native system APIs. The globe is decorative;
-no geolocation service is contacted.
+and interface counters come from native system APIs. The network panel queries
+ipwho.is for the public IP and approximate IP-based location; the map uses
+public-domain Natural Earth land data.
 
 ### Background Work
 
@@ -62,6 +75,13 @@ is hidden or occluded; filesystem watchers and listings pause when Files is not
 visible. Terminal input and output retain their independent responsive path.
 Right-click opens app actions, while editable fields keep their standard editing
 menus. The interface still uses Tauri's system WebView.
+
+The command bar hides while a TUI or command owns the terminal and returns at the
+shell prompt. Clipboard images are written to private temporary PNG files and
+pasted as paths, which image-aware TUIs such as OpenCode recognize as attachments.
+The editor supports multiline AI suggestions across languages, plus Emmet HTML/CSS
+expansion with Tab. **CONFIG → General → Custom terminal prompts** enables the
+segmented OS-logo prompt.
 
 ## AI Setup And Existing Data
 
@@ -106,6 +126,7 @@ The macOS debug bundle is `src-tauri/target/debug/bundle/macos/Terex UI.app`.
 pnpm check-types
 pnpm lint
 pnpm exec vitest run --maxWorkers=4
+node --test scripts/release.check.mjs
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
@@ -118,7 +139,12 @@ and publishes one release only after every build succeeds.
 
 No manual tag push is needed. The publishing job creates its own
 `build-<run-number>-<attempt>` release tag pointing to the triggering commit.
-It uses GitHub's automatic `GITHUB_TOKEN`; signing credentials are not required.
+It uses GitHub's automatic `GITHUB_TOKEN` and a dedicated `TAURI_SIGNING_PRIVATE_KEY`
+repository secret matching the public key in `src-tauri/tauri.conf.json`. Private
+signing keys stay outside the repository. CI stamps a newer patch version for each
+run, signs the final packages (after AppImage fixes), and validates all target
+entries before publishing `latest.json`. macOS and Windows OS-signing identities
+are not required for these updater signatures.
 
 ## Credits And License
 

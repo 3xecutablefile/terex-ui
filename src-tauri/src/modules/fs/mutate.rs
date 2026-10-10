@@ -353,20 +353,22 @@ pub fn fs_delete(path: String, workspace: Option<WorkspaceEnv>) -> Result<(), St
 }
 
 #[tauri::command]
-pub fn fs_delete_batch(
+pub async fn fs_delete_batch(
     paths: Vec<String>,
     root: String,
     workspace: Option<WorkspaceEnv>,
     registry: tauri::State<'_, WorkspaceRegistry>,
-) -> FsDeleteBatchResult {
+) -> Result<FsDeleteBatchResult, String> {
     let workspace = WorkspaceEnv::from_option(workspace);
     let Ok(root) = resolve_authorized_root(&root, &workspace, &registry) else {
-        return FsDeleteBatchResult {
+        return Ok(FsDeleteBatchResult {
             deleted: Vec::new(),
             failed: paths.len(),
-        };
+        });
     };
-    fs_delete_batch_impl(paths, &root, &workspace)
+    tauri::async_runtime::spawn_blocking(move || fs_delete_batch_impl(paths, &root, &workspace))
+        .await
+        .map_err(|error| error.to_string())
 }
 
 fn fs_delete_batch_impl(
@@ -402,6 +404,22 @@ fn copy_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Resu
     } else {
         std::fs::copy(src, dst).map(|_| ())
     }
+}
+
+#[tauri::command]
+pub async fn fs_save_copy(source: String, destination: String, workspace: Option<WorkspaceEnv>) -> Result<(), String> {
+    let workspace = WorkspaceEnv::from_option(workspace);
+    let source = resolve_path(&source, &workspace);
+    let destination = std::path::PathBuf::from(destination);
+    if !destination.is_absolute() { return Err("Destination must be an absolute path".into()); }
+    tauri::async_runtime::spawn_blocking(move || {
+        let parent = destination.parent().ok_or("Missing destination directory")?;
+        let temporary = tempfile::NamedTempFile::new_in(parent).map_err(|e| e.to_string())?;
+        std::fs::copy(source, temporary.path()).map_err(|e| e.to_string())?;
+        temporary.as_file().sync_all().map_err(|e| e.to_string())?;
+        temporary.persist(destination).map_err(|e| e.to_string())?;
+        Ok(())
+    }).await.map_err(|e| e.to_string())?
 }
 
 /// Copies external files/dirs into a destination directory, recursively for

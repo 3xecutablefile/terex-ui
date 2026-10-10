@@ -167,14 +167,13 @@ export async function buildLanguageModel(
           "OpenAI-compatible provider has no base URL. Set it in Settings → Models.",
         );
       }
-      const { createOpenAICompatible } =
-        await import("@ai-sdk/openai-compatible");
-      built = createOpenAICompatible({
-        name: "openai-compatible",
+      const { compatibleModel } = await import("@/modules/ai/lib/compatibleModel");
+      built = await compatibleModel({
+        modelId: resolvedModelId,
         baseURL: compatURL,
         apiKey: epKey || key || undefined,
         fetch: localProxyFetch,
-      })(resolvedModelId);
+      });
       break;
     }
     case "lmstudio": {
@@ -244,13 +243,17 @@ export function buildConfiguredLanguageModel(
         `${ep.name}: no model id set. Open Settings → Models.`,
       );
     }
-    return buildLanguageModel(
+    const credential = local.customEndpointKeys?.[eid];
+    const keyPromise = credential != null
+      ? Promise.resolve(credential)
+      : import("@/modules/ai/lib/keyring").then(({ getCustomEndpointKey }) => getCustomEndpointKey(eid));
+    return keyPromise.then((apiKey) => buildLanguageModel(
       "openai-compatible",
       keys,
       ep.modelId.trim(),
       { openaiCompatibleBaseURL: ep.baseURL },
-      local.customEndpointKeys?.[eid],
-    );
+      apiKey,
+    ));
   }
   const m = resolveModel(modelId);
   let resolvedId: string = m.id;

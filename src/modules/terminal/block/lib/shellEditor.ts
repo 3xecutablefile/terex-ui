@@ -37,7 +37,8 @@ import {
 import { tags as t } from "@lezer/highlight";
 import { completionIcon } from "./completionIcons";
 import { historyOpen, historyPopover } from "./historyPopover";
-import { inlineSuggestion } from "./inlineSuggest";
+import { inlineSuggestion, acceptInlineSuggestion, hasInlineSuggestion } from "./inlineSuggest";
+import { ShiftTap } from "./shiftTap";
 import { pathCompletions } from "./pathComplete";
 
 const shellLanguage = StreamLanguage.define(shell);
@@ -55,7 +56,7 @@ export type ShellEditorOptions = {
   /** Live command-name list (history first-words + PATH) for completion. */
   commandNames?: () => string[];
   /** Fish-style full-command autosuggestion for the current input line. */
-  suggest?: (line: string) => Promise<string | null>;
+  suggest?: (line: string, signal?:AbortSignal) => Promise<string | null>;
   /** Recency-ranked history for the ArrowUp popover (Ctrl-R style). */
   historyList?: (query: string, limit: number) => Promise<string[]>;
   /** Live cwd of the terminal, for path completion in argument position. */
@@ -70,6 +71,7 @@ export type ShellEditorHandle = {
   getValue(): string;
   setValue(text: string): void;
   clear(): void;
+  acceptSuggestion(run:boolean):boolean;
   setEditable(editable: boolean): void;
   retheme(fontFamily: string, fontSize: number, fontWeight: string): void;
   destroy(): void;
@@ -364,6 +366,14 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
       changes: { from: 0, to: view.state.doc.length, insert: "" },
     });
 
+  const accept = (view:EditorView,run:boolean) => {
+    if(view.state.readOnly)return false;
+    const accepted=acceptInlineSuggestion(view)||(completionStatus(view.state)==="active"&&acceptCompletion(view));
+    if(accepted&&run){const text=view.state.doc.toString();if(text.trim()){opts.onSubmit(text);clear(view);}}
+    return accepted;
+  };
+  const shiftTap=new ShiftTap();
+
   const submitKeys = Prec.highest(
     keymap.of([
       {
@@ -382,9 +392,9 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
       {
         key: "Tab",
         run: (view) =>
-          completionStatus(view.state) === "active"
+          acceptInlineSuggestion(view) || (completionStatus(view.state) === "active"
             ? acceptCompletion(view)
-            : startCompletion(view),
+            : startCompletion(view)),
       },
       {
         key: "Ctrl-c",
@@ -401,6 +411,7 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
   const state = EditorState.create({
     doc: "",
     extensions: [
+      EditorView.domEventHandlers({keydown:(event,view)=>{if(event.key==="Shift"&&!hasInlineSuggestion(view)&&completionStatus(view.state)!=="active")shiftTap.cancel();else shiftTap.down(event);return false;},keyup:(event,view)=>{const action=shiftTap.up(event.code);if(!action)return false;return accept(view,action==="submit");}}),
       history(),
       drawSelection({ cursorBlinkRate: 1100 }),
       rectangularSelection(),
@@ -463,6 +474,7 @@ export function createShellEditor(opts: ShellEditorOptions): ShellEditorHandle {
         selection: { anchor: text.length },
       }),
     clear: () => clear(view),
+    acceptSuggestion: (run) => accept(view,run),
     setEditable: (editable) =>
       view.dispatch({
         effects: editableComp.reconfigure([

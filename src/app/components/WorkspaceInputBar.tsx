@@ -30,6 +30,7 @@ export const TOGGLE_BLOCK_INPUT_EVENT = "terax:toggle-block-input";
 
 type Props = {
   isBlockTab: boolean;
+  terminalBusy: boolean;
   isTerminalTab: boolean;
   activeLeafId: number | null;
   cwd: string | null;
@@ -42,6 +43,7 @@ type Props = {
 
 export function WorkspaceInputBar({
   isBlockTab,
+  terminalBusy,
   isTerminalTab,
   activeLeafId,
   cwd,
@@ -68,12 +70,19 @@ export function WorkspaceInputBar({
   }, [blockMode]);
   const branch = useGitBranch(isTerminalTab ? cwd : null, promptNonce);
 
-  const showToggle = isBlockTab && hasComposer;
+  const showToggle = isBlockTab && hasComposer && !terminalBusy;
   const [mode, setMode] = useState<"shell" | "ai">("shell");
   const effectiveMode = !isBlockTab ? "ai" : hasComposer ? mode : "shell";
 
   const mounted = keysLoaded || isBlockTab;
-  const open = isBlockTab || (keysLoaded && panelOpen);
+  const open = !terminalBusy && (isBlockTab || (keysLoaded && panelOpen));
+  const wasBusy = useRef(false);
+  useEffect(() => {
+    if (terminalBusy && activeLeafId !== null) focusLeafInput(activeLeafId);
+    else if (wasBusy.current && open && effectiveMode === "ai")
+      c.textareaRef.current?.focus();
+    wasBusy.current = terminalBusy;
+  }, [terminalBusy, activeLeafId, open, effectiveMode, c.textareaRef]);
 
   const [aiLoaded, setAiLoaded] = useState(false);
   useEffect(() => {
@@ -163,10 +172,12 @@ export function WorkspaceInputBar({
                       <ShellInput
                         leafId={activeLeafId}
                         mode={blockMode}
-                        focused={effectiveMode === "shell"}
+                        focused={open && effectiveMode === "shell"}
                         onSubmit={controller.submitCommand}
                         onInterrupt={controller.interrupt}
                         getCwd={controller.getCwd}
+                        home={home}
+                        os={os}
                       />
                     </Suspense>
                   )}
@@ -196,6 +207,8 @@ export function WorkspaceInputBar({
       data-state={open ? "open" : "closed"}
       className="terax-reveal"
       aria-hidden={!open}
+      inert={!open}
+      style={terminalBusy ? { display: "none" } : undefined}
     >
       <div>{content}</div>
     </div>

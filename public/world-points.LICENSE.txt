@@ -1,0 +1,4 @@
+World land coordinates derived from Natural Earth (1:110m physical land).
+Natural Earth data is in the public domain.
+Source: https://www.naturalearthdata.com/about/terms-of-use/
+Generator: scripts/generate-world.mjs

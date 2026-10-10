@@ -10,7 +10,7 @@ export interface SystemSnapshot {
   memoryTotal: number;
   swapUsed: number;
   swapTotal: number;
-  processes: { pid: number; name: string; cpu: number; memory: number }[];
+  processes: { pid: number; name: string; cpu: number; memory: number; started: number }[];
   interface: string | null;
   address: string | null;
   received: number;
@@ -39,6 +39,20 @@ export function parentPath(path: string): string {
 
 export function joinPath(path: string, name: string): string {
   return `${path.replace(/[\\/]+$/, "")}/${name}`;
+}
+
+export function validEntryName(name: string): string {
+  if (!name.trim() || name === "." || name === ".." || /[\\/\x00-\x1f\x7f]/.test(name)) throw new Error("Enter a name without path separators or control characters.");
+  return name;
+}
+
+export function relativePath(from: string, to: string): string {
+  const a = from.replace(/\\/g,"/").split("/").filter(Boolean);
+  const b = to.replace(/\\/g,"/").split("/").filter(Boolean);
+  if (/^[A-Za-z]:$/.test(a[0] ?? "") && a[0].toLowerCase() !== b[0]?.toLowerCase()) return to;
+  let common=0;
+  while(common<a.length&&common<b.length&&a[common]===b[common])common++;
+  return [...a.slice(common).map(()=>".."),...b.slice(common)].join("/")||".";
 }
 
 const SPECIAL_KEYS: Record<string, string> = {

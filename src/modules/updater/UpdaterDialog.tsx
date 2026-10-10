@@ -8,168 +8,105 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { useComposer } from "@/modules/ai/lib/composer";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import { useState } from "react";
 import { useUpdater } from "./useUpdater";
 
-type DistroKey = "arch" | "debian" | "fedora";
-
-function distroCommand(key: DistroKey, version: string): string {
-  switch (key) {
-    case "arch":
-      return "yay -S terax-bin";
-    case "debian":
-      return `sudo apt install ./Terex.UI_${version}_amd64.deb`;
-    case "fedora":
-      return `sudo dnf install ./Terex.UI-${version}-1.x86_64.rpm`;
-  }
-}
-
-const DISTROS: { key: DistroKey; label: string }[] = [
-  { key: "arch", label: "Arch" },
-  { key: "debian", label: "Debian / Ubuntu" },
-  { key: "fedora", label: "Fedora / RHEL" },
-];
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-export function UpdaterDialog() {
-  const { status, install, dismiss } = useUpdater();
-  const [copied, setCopied] = useState(false);
-  const [distro, setDistro] = useState<DistroKey>("arch");
-  const manualVersion =
-    status.kind === "manual-available" ? status.info.version : "";
-  const activeCommand = distroCommand(distro, manualVersion);
-
-  const open =
-    status.kind === "available" ||
-    status.kind === "manual-available" ||
-    status.kind === "downloading" ||
-    status.kind === "ready";
-
-  if (!open) return null;
-
-  const update = status.kind === "available" ? status.update : null;
-  const manual = status.kind === "manual-available" ? status.info : null;
+export function UpdaterDialog({
+  beforeInstall,
+}: {
+  beforeInstall: () => Promise<void>;
+}) {
+  const { status, open, check, install, dismiss } = useUpdater();
+  const composer = useComposer();
+  const locked = status.kind === "installing";
   const downloading = status.kind === "downloading";
-  const ready = status.kind === "ready";
-
-  const copyCommand = async () => {
-    if (!navigator?.clipboard?.writeText) return;
-    try {
-      await navigator.clipboard.writeText(activeCommand);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // ignore
-    }
-  };
-  const progress =
+  const percent =
     downloading && status.contentLength
       ? Math.min(100, (status.downloaded / status.contentLength) * 100)
       : null;
-
+  const guardedInstall = async () => {
+    if (composer.isBusy)
+      throw new Error("Wait for the AI task to finish before installing.");
+    if (composer.value.trim() || composer.files.length)
+      throw new Error("Send or clear the AI draft before installing.");
+    await beforeInstall();
+  };
   return (
     <Dialog
       open={open}
-      onOpenChange={(o) => {
-        if (
-          !o &&
-          (status.kind === "available" || status.kind === "manual-available")
-        )
-          dismiss();
+      onOpenChange={(value) => {
+        if (!value && !locked) dismiss();
       }}
     >
-      <DialogContent className="sm:max-w-[440px]">
+      <DialogContent
+        className="sm:max-w-[440px]"
+        onInteractOutside={(event) => {
+          if (locked) event.preventDefault();
+        }}
+        onEscapeKeyDown={(event) => {
+          if (locked) event.preventDefault();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>
-            {ready
-              ? "Update ready"
+            {status.kind === "ready"
+              ? `Terex UI ${status.version} is ready`
               : downloading
-                ? "Downloading update…"
-                : manual
-                  ? `Terex UI v${manual.version} is available`
-                  : `Terex UI v${update?.version} is available`}
+                ? "Downloading update"
+                : status.kind === "checking"
+                  ? "Checking for updates"
+                  : locked
+                    ? "Installing update"
+                    : status.kind === "error"
+                      ? "Update could not finish"
+                      : status.kind === "manual"
+                        ? "Package update"
+                        : "Terex UI is up to date"}
           </DialogTitle>
           <DialogDescription>
-            {ready
-              ? "Restart Terex UI to finish installing."
-              : downloading
-                ? progress !== null
-                  ? `${progress.toFixed(0)}% — ${formatBytes(status.downloaded)}`
-                  : formatBytes(status.downloaded)
-                : manual
-                  ? `You're on v${manual.currentVersion}. Pick your distro and run the command, or grab the package from GitHub.`
-                  : update?.body || "A new version is ready to install."}
+            {status.kind === "ready"
+              ? "The download and its signature have been verified. Save your work and finish running commands before installing and restarting."
+              : status.kind === "error"
+                ? status.message
+                : status.kind === "manual"
+                  ? "Automatic updates are supported by the Linux AppImage. Install the latest DEB/RPM with your package manager."
+                  : downloading
+                    ? `${(status.downloaded / 1048576).toFixed(1)} MB downloaded${percent !== null ? ` (${percent.toFixed(0)}%)` : ""}`
+                    : locked
+                      ? "Terex UI will restart when installation finishes."
+                      : status.kind === "checking"
+                        ? "Checking the signed release channel."
+                        : "No newer release is available."}
           </DialogDescription>
         </DialogHeader>
-
-        {downloading && progress !== null && (
-          <Progress value={progress} className="mt-2" />
-        )}
-        {downloading && progress === null && (
-          <Progress value={undefined} className="mt-2 animate-pulse" />
-        )}
-
-        {manual && (
-          <div className="mt-2 flex flex-col gap-2">
-            <div className="flex gap-1 rounded-md bg-muted/40 p-1">
-              {DISTROS.map((d) => (
-                <button
-                  key={d.key}
-                  type="button"
-                  onClick={() => setDistro(d.key)}
-                  className={`flex-1 rounded px-2 py-1 text-[11px] transition-colors ${
-                    distro === d.key
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {d.label}
-                </button>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/40 px-3 py-2 font-mono text-[12px]">
-              <span className="flex-1 select-all">$ {activeCommand}</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-[11px]"
-                onClick={() => void copyCommand()}
-              >
-                {copied ? "Copied" : "Copy"}
-              </Button>
-            </div>
-          </div>
-        )}
-
+        {downloading && <Progress value={percent ?? undefined} />}
         <DialogFooter>
-          {status.kind === "available" && (
-            <>
-              <Button variant="ghost" size="sm" onClick={dismiss}>
-                Later
-              </Button>
-              <Button size="sm" onClick={() => void install()}>
-                Install &amp; restart
-              </Button>
-            </>
+          {!locked && (
+            <Button variant="ghost" onClick={dismiss}>
+              {downloading || status.kind === "ready" ? "Later" : "Close"}
+            </Button>
           )}
-          {manual && (
-            <>
-              <Button variant="ghost" size="sm" onClick={dismiss}>
-                Later
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => void openUrl(manual.releaseUrl)}
-              >
-                Download package
-              </Button>
-            </>
+          {status.kind === "ready" && (
+            <Button onClick={() => void install(guardedInstall)}>
+              Install &amp; restart
+            </Button>
+          )}
+          {status.kind === "error" && (
+            <Button onClick={() => void check({ manual: true })}>
+              Try again
+            </Button>
+          )}
+          {status.kind === "manual" && (
+            <Button
+              onClick={() =>
+                void openUrl(
+                  "https://github.com/3xecutablefile/terex-ui/releases/latest",
+                )
+              }
+            >
+              Download package
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>

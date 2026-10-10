@@ -7,9 +7,19 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { consumeLaunchFiles, getLaunchDir } from "@/lib/launchDir";
 import { quoteShellArg } from "@/lib/shellQuote";
-import { IS_WINDOWS } from "@/lib/platform";
-import { readTerminalClipboard, writeTerminalClipboard } from "@/modules/terminal/lib/terminalClipboard";
-import { pasteIntoSession } from "@/modules/terminal/lib/terminalSessionApi";
+import { IS_MAC, IS_WINDOWS } from "@/lib/platform";
+import {
+  readTerminalPaste,
+  writeTerminalClipboard,
+} from "@/modules/terminal/lib/terminalClipboard";
+import {
+  pasteIntoSession,
+  dispatchTerminalKey,
+  acceptTerminalSuggestion,
+  getLeafDraft,
+} from "@/modules/terminal/lib/terminalSessionApi";
+import { SHORTCUTS, matchBinding } from "@/modules/shortcuts/shortcuts";
+import { useTerminalBusy } from "@/modules/terminal/lib/terminalActivity";
 import { toast } from "sonner";
 import { usePresence } from "@/lib/usePresence";
 import { useZoom } from "@/lib/useZoom";
@@ -197,6 +207,7 @@ export default function App() {
     return t && t.kind === "terminal" ? t : null;
   }, [tabs, activeId]);
   const activeLeafId = activeTerminalTab?.activeLeafId ?? null;
+  const terminalBusy = useTerminalBusy(activeLeafId);
 
   const searchAddons = useRef<Map<number, TerminalSearchController>>(new Map());
   const [activeSearchAddon, setActiveSearchAddon] =
@@ -355,7 +366,15 @@ export default function App() {
 
   const activeTab = tabs.find((t) => t.id === activeId);
   const isTerminalTab = activeTab?.kind === "terminal";
-  const isBlockTab = activeTerminalTab?.blocks === true;
+  const terminalSuggestions = usePreferencesStore((s) => s.terminalSuggestions);
+  const customTerminalPrompts = usePreferencesStore(
+    (s) => s.customTerminalPrompts,
+  );
+  const isBlockTab =
+    !!activeTerminalTab &&
+    (activeTerminalTab.blocks === true ||
+      customTerminalPrompts ||
+      (terminalSuggestions && !activeTerminalTab.private));
   const isEditorTab = activeTab?.kind === "editor";
   const isGitHistoryTab = activeTab?.kind === "git-history";
 
@@ -1019,7 +1038,7 @@ export default function App() {
         id === "blocks.prev" ||
         id === "blocks.next"
       ) {
-        return !(activeTab?.kind === "terminal" && activeTab.blocks === true);
+        return !isBlockTab || terminalBusy;
       }
       if (id === "sidebar.toggle") {
         // Ctrl+B is also Claude Code's "run in background" key. While a terminal
@@ -1034,7 +1053,7 @@ export default function App() {
       }
       return false;
     },
-    [activeTab, captureActiveSelection],
+    [activeTab, captureActiveSelection, isBlockTab, terminalBusy],
   );
 
   useGlobalShortcuts(shortcutHandlers, { isDisabled: shortcutsDisabled });
@@ -1392,196 +1411,284 @@ export default function App() {
             cwd={activeCwd ?? explorerRoot}
             activeId={activeId}
             scopeKey={`${activeId}:${activeLeafId ?? "none"}`}
-            terminalLabel={activeTerminalTab?.customTitle || activeCwd?.split(/[\\/]/).filter(Boolean).pop() || "Terminal"}
+            terminalLabel={
+              activeTerminalTab?.customTitle ||
+              activeCwd?.split(/[\\/]/).filter(Boolean).pop() ||
+              "Terminal"
+            }
             ready={booted}
             terminalActive={isTerminalTab}
             zen={zenMode}
             aiOpen={panelOpen}
-            onInput={(value) => {
+            onAccept={(run) =>
+              activeLeafId !== null &&
+              acceptTerminalSuggestion(activeLeafId, run)
+            }
+            onKey={(key) => {
+              const event = new KeyboardEvent("keydown", {
+                ...key,
+                bubbles: true,
+                cancelable: true,
+              });
+              const clipboard = IS_MAC
+                ? key.metaKey
+                : key.ctrlKey && key.shiftKey;
+              if (clipboard && key.code === "KeyC") {
+                const text = captureActiveSelection();
+                if (text)
+                  void writeTerminalClipboard(text).catch((e) =>
+                    toast.error(String(e)),
+                  );
+                return;
+              }
+              if (clipboard && key.code === "KeyV") {
+                if (activeLeafId !== null) {
+                  const leaf = activeLeafId;
+                  void readTerminalPaste()
+                    .then((text) => {
+                      if (text) pasteIntoSession(leaf, text);
+                    })
+                    .catch((error) =>
+                      toast.error(`Paste failed: ${String(error)}`),
+                    );
+                }
+                return;
+              }
+              if (key.metaKey && key.code === "KeyQ") {
+                void getCurrentWindow().close();
+                return;
+              }
+              if (!key.altGraph)
+                for (const shortcut of SHORTCUTS) {
+                  const bindings =
+                    usePreferencesStore.getState().shortcuts[shortcut.id] ||
+                    shortcut.defaultBindings;
+                  if (
+                    bindings.some((binding) =>
+                      matchBinding(event, binding, shortcut.id),
+                    )
+                  ) {
+                    if (
+                      shortcut.id === "terminal.clear" ||
+                      !shortcutsDisabled(shortcut.id, event)
+                    )
+                      shortcutHandlers[shortcut.id]?.(event);
+                    return;
+                  }
+                }
+              if (key.metaKey) return;
               if (activeLeafId !== null) {
-                writeToSession(activeLeafId, value);
+                dispatchTerminalKey(activeLeafId, event, key.text);
                 terminalRefs.current.get(activeLeafId)?.focus();
               }
             }}
             onOpenFile={(path) => handleOpenFile(path, true)}
             onTerminal={(path) => newTab(path)}
-            onNavigate={(path) => activeLeafId === null ? Promise.resolve() : changeSessionDirectory(activeLeafId, path, IS_WINDOWS && workspaceEnv.kind === "local")}
-            getSelection={() => window.getSelection()?.toString() || captureActiveSelection() || ""}
-            onCopy={(text) => {void writeTerminalClipboard(text).catch((error) => toast.error(String(error)));}}
+            onNavigate={(path) =>
+              activeLeafId === null
+                ? Promise.resolve()
+                : changeSessionDirectory(
+                    activeLeafId,
+                    path,
+                    IS_WINDOWS && workspaceEnv.kind === "local",
+                  )
+            }
+            getSelection={() =>
+              window.getSelection()?.toString() ||
+              captureActiveSelection() ||
+              ""
+            }
+            onCopy={(text) => {
+              void writeTerminalClipboard(text).catch((error) =>
+                toast.error(String(error)),
+              );
+            }}
             onPaste={() => {
               if (activeLeafId === null) return;
               const leaf = activeLeafId;
-              void readTerminalClipboard().then((text) => { if (text) pasteIntoSession(leaf, text); });
+              void readTerminalPaste()
+                .then((text) => {
+                  if (text) pasteIntoSession(leaf, text);
+                })
+                .catch((error) =>
+                  toast.error(`Paste failed: ${String(error)}`),
+                );
             }}
             onAi={togglePanelAndFocus}
             onAttach={handleAttachFileToAgent}
             onSettings={() => void openSettingsWindow()}
             onCommands={() => openCommandPalette("commands")}
+            fileActions={{
+              onSourceControl: handleOpenRepositoryInSourceControl,
+              onHistory: handleOpenGitHistoryForPath,
+              onDeleted: handlePathsDeleted,
+            }}
           >
-          {!zenMode && (
-            <Header
-              tabs={spaceTabs}
-              activeId={activeId}
-              onSelect={setActiveId}
-              onNew={openNewTab}
-              onNewBlock={openNewBlockTab}
-              onNewPrivate={openNewPrivateTab}
-              onNewPreview={() => openPreviewTab("")}
-              onNewEditor={() => setNewEditorOpen(true)}
-              onNewGitGraph={openGitGraphFromContext}
-              onLaunchAgents={launchAgentGroup}
-              onClose={handleClose}
-              onCloseTabsToRight={handleCloseTabsToRight}
-              onCloseOtherTabs={handleCloseOtherTabs}
-              onPin={pinTab}
-              onRename={handleRenameTab}
-              onReorder={reorderTabByGap}
-              onToggleSidebar={toggleSidebar}
-              onOpenCommandPalette={() => openCommandPalette("commands")}
-              onActivateAgent={onActivateAgent}
-              onActivateLocalAgent={onActivateLocalAgent}
-              onOpenSettings={() => void openSettingsWindow()}
-              spaceSwitcher={spaceSwitcher}
-              searchTarget={searchTarget}
-              searchRef={searchInlineRef}
-              onOverrideLanguage={setOverrideLanguage}
-            />
-          )}
+            {!zenMode && (
+              <Header
+                tabs={spaceTabs}
+                activeId={activeId}
+                onSelect={setActiveId}
+                onNew={openNewTab}
+                onNewBlock={openNewBlockTab}
+                onNewPrivate={openNewPrivateTab}
+                onNewPreview={() => openPreviewTab("")}
+                onNewEditor={() => setNewEditorOpen(true)}
+                onNewGitGraph={openGitGraphFromContext}
+                onLaunchAgents={launchAgentGroup}
+                onClose={handleClose}
+                onCloseTabsToRight={handleCloseTabsToRight}
+                onCloseOtherTabs={handleCloseOtherTabs}
+                onPin={pinTab}
+                onRename={handleRenameTab}
+                onReorder={reorderTabByGap}
+                onToggleSidebar={toggleSidebar}
+                onOpenCommandPalette={() => openCommandPalette("commands")}
+                onActivateAgent={onActivateAgent}
+                onActivateLocalAgent={onActivateLocalAgent}
+                onOpenSettings={() => void openSettingsWindow()}
+                spaceSwitcher={spaceSwitcher}
+                searchTarget={searchTarget}
+                searchRef={searchInlineRef}
+                onOverrideLanguage={setOverrideLanguage}
+              />
+            )}
 
-          <main className="zoom-content flex min-h-0 flex-1 flex-col">
-            <ResizablePanelGroup
-              orientation="horizontal"
-              className="min-h-0 flex-1"
-              onLayoutChanged={(_, { isUserInteraction }) => {
-                const width = sidebarRef.current?.getSize().inPixels ?? 0;
-                persistSidebarWidth(width, isUserInteraction);
-              }}
-            >
-              <ResizablePanel
-                id="sidebar"
-                panelRef={sidebarRef}
-                defaultSize={
-                  initialSidebarCollapsed
-                    ? "0px"
-                    : `${sidebarWidthRef.current}px`
-                }
-                minSize={`${SIDEBAR_MIN_WIDTH}px`}
-                maxSize={`${SIDEBAR_MAX_WIDTH}px`}
-                collapsible
-                collapsedSize={0}
-                onResize={(size) => {
-                  persistSidebarCollapsed(size.inPixels <= 0);
+            <main className="zoom-content flex min-h-0 flex-1 flex-col">
+              <ResizablePanelGroup
+                orientation="horizontal"
+                className="min-h-0 flex-1"
+                onLayoutChanged={(_, { isUserInteraction }) => {
+                  const width = sidebarRef.current?.getSize().inPixels ?? 0;
+                  persistSidebarWidth(width, isUserInteraction);
                 }}
               >
-                <div className="h-full min-h-0 pl-2 pr-0.5">
-                  <div className="terax-pane flex h-full min-h-0 flex-col">
-                    <div
-                      key={sidebarView}
-                      className="min-h-0 flex-1 terax-panel-in"
-                    >
-                      {sidebarView === "explorer" ? (
-                        <FileExplorer
-                          ref={explorerRef}
-                          rootPath={explorerRoot}
-                          gitStatus={
-                            explorerGitDecorations ? sourceControl.status : null
-                          }
-                          activeFilePath={explorerActiveFilePath}
-                          onOpenFile={handleOpenFile}
-                          onPathRenamed={handleExplorerPathRenamed}
-                          onPathsDeleted={handlePathsDeleted}
-                          canReplacePath={canReplaceExplorerPath}
-                          onRevealInTerminal={cdInNewTab}
-                          onOpenInSourceControl={
-                            handleOpenRepositoryInSourceControl
-                          }
-                          onOpenGitHistory={handleOpenGitHistoryForPath}
-                          onAttachToAgent={handleAttachFileToAgent}
-                          pathDropTarget={terminalPathDropTarget}
-                        />
-                      ) : (
-                        <SourceControlPanel
-                          open
-                          sourceControl={sourceControl}
-                          onOpenDiff={openGitDiffTab}
-                          onOpenGitGraph={openGitGraphFromContext}
-                          onOpenFile={handleOpenFile}
-                          onNavigateToPath={cdInNewTab}
-                          repositoryTarget={sourceControlRepositoryTarget}
-                          onFollowRepositoryContext={
-                            handleFollowRepositoryContext
-                          }
-                        />
-                      )}
-                    </div>
-                    <SidebarRail
-                      activeView={sidebarView}
-                      onSelectView={persistSidebarView}
-                      changedCount={sourceControl.changedCount}
-                    />
-                  </div>
-                </div>
-              </ResizablePanel>
-              <ResizableHandle className="w-1 rounded-full bg-transparent transition-colors duration-[var(--dur-fast)] after:w-4 hover:bg-border" />
-              <ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
-                <div className="h-full min-h-0 pl-0.5 pr-2">
-                  <div className="terax-pane flex h-full min-h-0 flex-col">
-                    <div className="relative min-h-0 flex-1">
-                      <WorkspaceSurface
-                        tabs={tabs}
-                        activeId={activeId}
-                        activeTab={activeTab}
-                        registerTerminalHandle={registerTerminalHandle}
-                        onSearchReady={handleSearchReady}
-                        onCwd={handleTerminalCwd}
-                        onExit={handleLeafExit}
-                        onFocusLeaf={handleFocusLeaf}
-                        registerEditorHandle={registerEditorHandle}
-                        onEditorDirtyChange={handleEditorDirty}
-                        onEditorCloseTab={disposeTab}
-                        registerPreviewHandle={registerPreviewHandle}
-                        onPreviewUrlChange={handlePreviewUrl}
-                        onAiDiffAccept={(id) => respondToApproval(id, true)}
-                        onAiDiffReject={(id) => respondToApproval(id, false)}
-                        onOpenCommitFile={openCommitFileDiffTab}
-                        onGitHistorySearchHandle={setGitHistoryHandle}
-                        onSetMarkdownView={setMarkdownView}
+                <ResizablePanel
+                  id="sidebar"
+                  panelRef={sidebarRef}
+                  defaultSize={
+                    initialSidebarCollapsed
+                      ? "0px"
+                      : `${sidebarWidthRef.current}px`
+                  }
+                  minSize={`${SIDEBAR_MIN_WIDTH}px`}
+                  maxSize={`${SIDEBAR_MAX_WIDTH}px`}
+                  collapsible
+                  collapsedSize={0}
+                  onResize={(size) => {
+                    persistSidebarCollapsed(size.inPixels <= 0);
+                  }}
+                >
+                  <div className="h-full min-h-0 pl-2 pr-0.5">
+                    <div className="terax-pane flex h-full min-h-0 flex-col">
+                      <div
+                        key={sidebarView}
+                        className="min-h-0 flex-1 terax-panel-in"
+                      >
+                        {sidebarView === "explorer" ? (
+                          <FileExplorer
+                            ref={explorerRef}
+                            rootPath={explorerRoot}
+                            gitStatus={
+                              explorerGitDecorations
+                                ? sourceControl.status
+                                : null
+                            }
+                            activeFilePath={explorerActiveFilePath}
+                            onOpenFile={handleOpenFile}
+                            onPathRenamed={handleExplorerPathRenamed}
+                            onPathsDeleted={handlePathsDeleted}
+                            canReplacePath={canReplaceExplorerPath}
+                            onRevealInTerminal={cdInNewTab}
+                            onOpenInSourceControl={
+                              handleOpenRepositoryInSourceControl
+                            }
+                            onOpenGitHistory={handleOpenGitHistoryForPath}
+                            onAttachToAgent={handleAttachFileToAgent}
+                            pathDropTarget={terminalPathDropTarget}
+                          />
+                        ) : (
+                          <SourceControlPanel
+                            open
+                            sourceControl={sourceControl}
+                            onOpenDiff={openGitDiffTab}
+                            onOpenGitGraph={openGitGraphFromContext}
+                            onOpenFile={handleOpenFile}
+                            onNavigateToPath={cdInNewTab}
+                            repositoryTarget={sourceControlRepositoryTarget}
+                            onFollowRepositoryContext={
+                              handleFollowRepositoryContext
+                            }
+                          />
+                        )}
+                      </div>
+                      <SidebarRail
+                        activeView={sidebarView}
+                        onSelectView={persistSidebarView}
+                        changedCount={sourceControl.changedCount}
                       />
                     </div>
-
-                    <WorkspaceInputBar
-                      isBlockTab={isBlockTab}
-                      isTerminalTab={isTerminalTab}
-                      activeLeafId={activeLeafId}
-                      cwd={activeCwd}
-                      home={home}
-                      hasComposer={hasComposer}
-                      panelOpen={panelOpen}
-                      keysLoaded={keysLoaded}
-                      onConnect={() => void openSettingsWindow("models")}
-                    />
                   </div>
-                </div>
-              </ResizablePanel>
-            </ResizablePanelGroup>
-          </main>
+                </ResizablePanel>
+                <ResizableHandle className="w-1 rounded-full bg-transparent transition-colors duration-[var(--dur-fast)] after:w-4 hover:bg-border" />
+                <ResizablePanel id="workspace" defaultSize="78%" minSize="30%">
+                  <div className="h-full min-h-0 pl-0.5 pr-2">
+                    <div className="terax-pane flex h-full min-h-0 flex-col">
+                      <div className="relative min-h-0 flex-1">
+                        <WorkspaceSurface
+                          tabs={tabs}
+                          activeId={activeId}
+                          activeTab={activeTab}
+                          registerTerminalHandle={registerTerminalHandle}
+                          onSearchReady={handleSearchReady}
+                          onCwd={handleTerminalCwd}
+                          onExit={handleLeafExit}
+                          onFocusLeaf={handleFocusLeaf}
+                          registerEditorHandle={registerEditorHandle}
+                          onEditorDirtyChange={handleEditorDirty}
+                          onEditorCloseTab={disposeTab}
+                          registerPreviewHandle={registerPreviewHandle}
+                          onPreviewUrlChange={handlePreviewUrl}
+                          onAiDiffAccept={(id) => respondToApproval(id, true)}
+                          onAiDiffReject={(id) => respondToApproval(id, false)}
+                          onOpenCommitFile={openCommitFileDiffTab}
+                          onGitHistorySearchHandle={setGitHistoryHandle}
+                          onSetMarkdownView={setMarkdownView}
+                        />
+                      </div>
 
-          {!zenMode && (
-            <StatusBar
-              cwd={activeCwd}
-              filePath={activeFilePath}
-              home={home}
-              onCd={sendCd}
-              onWorkspaceChange={handleWorkspaceChange}
-              onOpenMini={openMini}
-              onOpenAi={togglePanelAndFocus}
-              hasComposer={hasComposer}
-              privateActive={
-                activeTab?.kind === "terminal" && activeTab.private === true
-              }
-            />
-          )}
+                      <WorkspaceInputBar
+                        isBlockTab={isBlockTab}
+                        terminalBusy={terminalBusy}
+                        isTerminalTab={isTerminalTab}
+                        activeLeafId={activeLeafId}
+                        cwd={activeCwd}
+                        home={home}
+                        hasComposer={hasComposer}
+                        panelOpen={panelOpen}
+                        keysLoaded={keysLoaded}
+                        onConnect={() => void openSettingsWindow("models")}
+                      />
+                    </div>
+                  </div>
+                </ResizablePanel>
+              </ResizablePanelGroup>
+            </main>
 
+            {!zenMode && (
+              <StatusBar
+                cwd={activeCwd}
+                filePath={activeFilePath}
+                home={home}
+                onCd={sendCd}
+                onWorkspaceChange={handleWorkspaceChange}
+                onOpenMini={openMini}
+                hasComposer={hasComposer}
+                privateActive={
+                  activeTab?.kind === "terminal" && activeTab.private === true
+                }
+              />
+            )}
           </Desktop>
           <WindowVibrancyBridge />
 
@@ -1636,7 +1743,40 @@ export default function App() {
             onCreated={(path) => openFileTab(path)}
           />
 
-          <UpdaterDialog />
+          <UpdaterDialog
+            beforeInstall={async () => {
+              const leaves = tabsRef.current.flatMap((tab) =>
+                tab.kind === "terminal" ? leafIds(tab.paneTree) : [],
+              );
+              const busy = await Promise.all(
+                leaves.map(async (leaf) => {
+                  const id = ptyIdForLeaf(leaf);
+                  return (
+                    id !== null &&
+                    (await invoke<boolean>("pty_has_foreground_process", {
+                      id,
+                    }))
+                  );
+                }),
+              );
+              if (
+                tabsRef.current.some(
+                  (tab) => tab.kind === "editor" && tab.dirty,
+                )
+              )
+                throw new Error(
+                  "Save edited files before installing the update.",
+                );
+              if (busy.some(Boolean))
+                throw new Error(
+                  "Finish running terminal commands before installing the update.",
+                );
+              if (leaves.some((leaf) => getLeafDraft(leaf).trim()))
+                throw new Error(
+                  "Run or clear pending shell commands before installing the update.",
+                );
+            }}
+          />
 
           <CloseDialogs
             tabs={tabs}

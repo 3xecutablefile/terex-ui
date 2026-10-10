@@ -161,6 +161,24 @@ async fn open_settings_window(app: tauri::AppHandle, tab: Option<String>) -> Res
     Ok(())
 }
 
+#[tauri::command]
+fn updater_supported() -> bool {
+    !cfg!(target_os = "linux") || std::env::var_os("APPIMAGE").is_some()
+}
+
+#[cfg(test)]
+mod updater_config_tests {
+    #[test]
+    fn updater_requires_signed_versions_from_the_fork_release_channel() {
+        let config: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let updater: tauri_plugin_updater::Config = serde_json::from_value(config["plugins"]["updater"].clone()).unwrap();
+        assert!(updater.require_signed_version);
+        assert!(!updater.pubkey.is_empty());
+        assert_eq!(updater.endpoints.len(), 1);
+        assert_eq!(updater.endpoints[0].as_str(), "https://github.com/3xecutablefile/terex-ui/releases/latest/download/latest.json");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     #[cfg(windows)]
@@ -212,6 +230,7 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .setup(move |_app| {
+            modules::keyboard::install(_app.handle());
             #[cfg(target_os = "macos")]
             modules::window_presentation::macos::install(_app.handle());
             if let Err(error) = control::start(_app.handle().clone(), control_for_setup.clone()) {
@@ -232,7 +251,11 @@ pub fn run() {
             Ok(())
         })
         .manage(pty::PtyState::default())
+        .plugin(tauri_plugin_dialog::init())
         .manage(modules::dashboard::DashboardState::default())
+        .manage(modules::terminal_clipboard::TerminalClipboardState::default())
+        .manage(modules::public_network::PublicNetworkState::default())
+        .manage(modules::process_control::ProcessControlState::default())
         .manage(modules::window_presentation::WindowPresentationState::default())
         .manage(control_state)
         .manage(shell::ShellState::default())
@@ -252,8 +275,14 @@ pub fn run() {
         .manage(LaunchDir(Mutex::new(cli_dir)))
         .manage(LaunchFiles(Mutex::new(launch.files)))
         .invoke_handler(tauri::generate_handler![
+            updater_supported,
+            modules::terminal_clipboard::terminal_clipboard_read,
             modules::shared_storage::shared_storage_paths,
             modules::dashboard::dashboard_snapshot,
+            modules::keyboard::keyboard_layout,
+            modules::public_network::public_network,
+            modules::process_control::suspended_processes,
+            modules::process_control::control_process,
             pty::pty_open,
             pty::pty_write,
             pty::pty_ack_output,
@@ -278,6 +307,7 @@ pub fn run() {
             fs::mutate::fs_delete,
             fs::mutate::fs_delete_batch,
             fs::mutate::fs_copy,
+            fs::mutate::fs_save_copy,
             fs::watch::fs_watch_add,
             fs::watch::fs_watch_remove,
             lsp::lsp_detect,
@@ -352,6 +382,9 @@ pub fn run() {
                 // Servers exit on stdin EOF, but destructors are not guaranteed
                 // on process exit; kill explicitly.
                 tauri::RunEvent::Exit => {
+                    if let Some(state) = app.try_state::<modules::terminal_clipboard::TerminalClipboardState>() {
+                        state.cleanup();
+                    }
                     #[cfg(target_os = "macos")]
                     modules::window_presentation::macos::uninstall();
                     if let Some(state) = app.try_state::<lsp::LspState>() {

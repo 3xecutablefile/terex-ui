@@ -15,7 +15,13 @@
     "path": [
       "dist/assets/*.js"
     ],
-    "limit": "1505 KB",
+    "limit": "1535 KB",
+    "gzip": true
+  },
+  {
+    "name": "Emmet HTML/CSS expansion (loaded with web languages)",
+    "path": ["dist/assets/emmet-*.js"],
+    "limit": "30 KB",
     "gzip": true
   },
   {

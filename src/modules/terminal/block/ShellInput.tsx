@@ -2,6 +2,11 @@ import { resolveFontFamily } from "@/lib/fonts";
 import { fmtShortcut, MOD_KEY } from "@/lib/platform";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/modules/theme";
+import { usePreferencesStore } from "@/modules/settings/preferences";
+import { CustomPrompt } from "@/modules/terminal/block/CustomPrompt";
+import { suggestCommand } from "@/modules/terminal/block/lib/aiSuggest";
+import { readTerminalPaste } from "@/modules/terminal/lib/terminalClipboard";
+import { toast } from "sonner";
 import { useEffect, useRef } from "react";
 import { runScopeHandlers } from "@codemirror/view";
 import {
@@ -13,6 +18,7 @@ import {
   setLeafInputFocus,
   setLeafInputKeyDown,
   setLeafInputPaste,
+  setLeafSuggestionAccept,
 } from "../lib/terminalSessionApi";
 import { useTerminalFont } from "../lib/useTerminalFont";
 import {
@@ -32,6 +38,8 @@ type Props = {
   onSubmit: (text: string) => void;
   onInterrupt: () => void;
   getCwd: () => string | null;
+  home: string | null;
+  os: string | null;
 };
 
 export default function ShellInput({
@@ -41,6 +49,8 @@ export default function ShellInput({
   onSubmit,
   onInterrupt,
   getCwd,
+  home,
+  os,
 }: Props) {
   const hostRef = useRef<HTMLDivElement>(null);
   const handleRef = useRef<ShellEditorHandle | null>(null);
@@ -50,6 +60,7 @@ export default function ShellInput({
   const leafIdRef = useRef(leafId);
   leafIdRef.current = leafId;
   const atPrompt = mode === "prompt";
+  const customPrompt = usePreferencesStore((s) => s.customTerminalPrompts);
   const focusableRef = useRef(false);
   focusableRef.current = focused && atPrompt;
 
@@ -84,9 +95,13 @@ export default function ShellInput({
       placeholderText: `Run a command  -  ↑ history  ${fmtShortcut(MOD_KEY, "U")} switch to AI`,
       commandNames: () => commandsRef.current,
       getCwd: () => cbRef.current.getCwd(),
-      onChange: (text) =>
-        setLeafInputActivity(leafIdRef.current, text.length > 0),
-      suggest: historySuggest,
+      onChange: (text) => {
+        setLeafDraft(leafIdRef.current, text);
+        setLeafInputActivity(leafIdRef.current, text.length > 0);
+      },
+      suggest: async (line, signal) =>
+        (await historySuggest(line)) ??
+        suggestCommand(line, cbRef.current.getCwd(), signal),
       historyList,
       onSubmit: (text) => {
         historyRecord(text);
@@ -118,6 +133,10 @@ export default function ShellInput({
   // tabs land with the cursor already in the input.
   useEffect(() => {
     setLeafInputFocus(leafId, () => handleRef.current?.focus());
+    setLeafSuggestionAccept(
+      leafId,
+      (run) => handleRef.current?.acceptSuggestion(run) ?? false,
+    );
     setLeafInputKeyDown(leafId, (event) => {
       const view = handleRef.current?.view;
       if (!view) return false;
@@ -127,7 +146,10 @@ export default function ShellInput({
     setLeafInputPaste(leafId, (text) => {
       const view = handleRef.current?.view;
       if (!view) return;
-      view.dispatch(view.state.replaceSelection(text));
+      view.dispatch({
+        ...view.state.replaceSelection(text),
+        userEvent: "input.type",
+      });
       view.focus();
     });
     handleRef.current?.setValue(getLeafDraft(leafId));
@@ -143,6 +165,7 @@ export default function ShellInput({
       setLeafInputFocus(leafId, null);
       setLeafInputKeyDown(leafId, null);
       setLeafInputPaste(leafId, null);
+      setLeafSuggestionAccept(leafId, null);
     };
   }, [leafId]);
 
@@ -176,19 +199,51 @@ export default function ShellInput({
   return (
     <div
       className={cn("flex items-start gap-2", !atPrompt && "opacity-45")}
+      style={{ fontFamily, fontSize, fontWeight }}
       onCopyCapture={onCopyCapture}
+      onPasteCapture={(event) => {
+        if (
+          !Array.from(event.clipboardData.items).some((item) =>
+            item.type.startsWith("image/"),
+          )
+        )
+          return;
+        event.preventDefault();
+        const handle = handleRef.current;
+        const leaf = leafId;
+        void readTerminalPaste()
+          .then((text) => {
+            if (
+              text &&
+              handle &&
+              handleRef.current === handle &&
+              leafIdRef.current === leaf &&
+              focusableRef.current
+            ) {
+              handle.view.dispatch({
+                ...handle.view.state.replaceSelection(text),
+                userEvent: "input.paste",
+              });
+            }
+          })
+          .catch((error) => toast.error(`Paste failed: ${String(error)}`));
+      }}
     >
-      <span
-        className="select-none pt-px text-primary/80"
-        style={{
-          fontFamily,
-          fontSize: `${fontSize}px`,
-          fontWeight,
-          lineHeight: 1.5,
-        }}
-      >
-        ❯
-      </span>
+      {customPrompt ? (
+        <CustomPrompt cwd={getCwd()} home={home} os={os} />
+      ) : (
+        <span
+          className="select-none pt-px text-primary/80"
+          style={{
+            fontFamily,
+            fontSize: `${fontSize}px`,
+            fontWeight,
+            lineHeight: 1.5,
+          }}
+        >
+          ❯
+        </span>
+      )}
       <div ref={hostRef} className="min-w-0 flex-1" />
     </div>
   );

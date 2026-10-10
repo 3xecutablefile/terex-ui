@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button";
-import { WindowControls } from "@/components/WindowControls";
-import { IS_MAC, USE_CUSTOM_WINDOW_CONTROLS } from "@/lib/platform";
+import { IS_MAC } from "@/lib/platform";
+import { OpenFilesView } from "@/lib/workspaceVisibility";
 import { NotificationBell } from "@/modules/agents";
 import type { AgentLaunchRequest } from "@/modules/agents/lib/launcher";
 import type { Tab } from "@/modules/tabs";
@@ -15,6 +15,7 @@ import {
   type ReactNode,
   type RefObject,
   useEffect,
+  useContext,
   useRef,
   useState,
 } from "react";
@@ -87,6 +88,7 @@ export function Header({
   searchRef,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const openFiles = useContext(OpenFilesView);
   const [compact, setCompact] = useState(false);
 
   useEffect(() => {
@@ -122,8 +124,9 @@ export function Header({
     >
       <div className="flex shrink-0 items-center gap-0.5">
         <Button
-          onClick={onToggleSidebar}
-          title="Toggle sidebar"
+          onClick={openFiles ?? onToggleSidebar}
+          title="Open Files"
+          aria-label="Open Files"
           variant="ghost"
           size="icon-sm"
           className="shrink-0 rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
@@ -205,12 +208,6 @@ export function Header({
 
       {!IS_MAC && settingsButton}
 
-      {USE_CUSTOM_WINDOW_CONTROLS && (
-        <>
-          <span className="ml-1 h-5 w-px shrink-0 bg-border/60" />
-          <WindowControls />
-        </>
-      )}
     </div>
   );
 }

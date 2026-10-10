@@ -2,7 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Terex UI",
   "mainBinaryName": "terex-ui",
-  "version": "0.9.0-beta",
+  "version": "0.10.0",
   "identifier": "io.github.3xecutablefile.terex-ui",
   "build": {
     "beforeDevCommand": "pnpm build:cli:dev && pnpm dev",
@@ -59,6 +59,7 @@
       "icons/icon.ico"
     ],
     "macOS": {
+      "signingIdentity": "-",
       "minimumSystemVersion": "13.0",
       "entitlements": "./entitlements.plist"
     },
@@ -118,7 +119,8 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNCQUJGRDhBQjYwRTM0NjkKUldScE5BNjJpdjJyT3dIN0dqbUpHaDA4QW1GaDVmTTllRXdZVk96dFNTRUZ3Y2hiVGszYjFqRloK",
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEUyMzQzQTAzODY1M0MxMTEKUldRUndWT0dBem8wNGlCMU90WkdCYm8rS1N4dlp2WVQ5VmVwY0R3WjVUcWE3ZGIwbmluZjh5SDIK",
+      "requireSignedVersion": true,
       "endpoints": [
         "https://github.com/3xecutablefile/terex-ui/releases/latest/download/latest.json"
       ]

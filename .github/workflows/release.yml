@@ -24,6 +24,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check-types
       - run: pnpm exec vitest run --maxWorkers=4
+      - run: node --test scripts/release.check.mjs
 
   build:
     name: Build ${{ matrix.name }}
@@ -78,31 +79,21 @@ jobs:
           workspaces: ./src-tauri -> target
           key: release-${{ matrix.target }}
       - run: pnpm install --frozen-lockfile
+      - name: Set monotonic release version
+        run: node scripts/release.mjs stamp
       - name: Build native installers
-        run: pnpm tauri build --ci --target '${{ matrix.target }}' --bundles '${{ matrix.bundles }}'
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: pnpm tauri build --ci --target '${{ matrix.target }}' --bundles '${{ matrix.bundles }}' --config '{"bundle":{"createUpdaterArtifacts":true}}'
       - name: Keep AppImage compatible with newer Wayland hosts
         if: runner.os == 'Linux'
         run: bash scripts/fix-appimage.sh 'src-tauri/target/${{ matrix.target }}/release/bundle/appimage'
       - name: Collect installers
         env:
-          TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          bundle="src-tauri/target/$TARGET/release/bundle"
-          mkdir -p release-assets
-          find "$bundle" -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.deb' -o -name '*.rpm' -o -name '*.AppImage' \) -exec cp '{}' release-assets/ \;
-          case "$RUNNER_OS" in
-            macOS)
-              tar -czf "release-assets/Terex-UI-$TARGET.app.tar.gz" -C "$bundle/macos" 'Terex UI.app'
-              compgen -G 'release-assets/*.dmg' >/dev/null
-              ;;
-            Linux)
-              for ext in AppImage deb rpm; do compgen -G "release-assets/*.$ext" >/dev/null; done
-              ;;
-            Windows)
-              for ext in exe msi; do compgen -G "release-assets/*.$ext" >/dev/null; done
-              ;;
-          esac
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: node scripts/release.mjs collect
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: release-${{ matrix.target }}
@@ -119,11 +110,19 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: release-*
           path: release-assets
           merge-multiple: true
+      - name: Assemble and validate signed update manifest
+        run: node scripts/release.mjs manifest
       - name: Create release from this push
         working-directory: release-assets
         env:
@@ -137,7 +136,8 @@ jobs:
           for ext in dmg app.tar.gz AppImage deb rpm exe msi; do
             compgen -G "*.$ext" >/dev/null
           done
-          find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z | xargs -0 sha256sum > SHA256SUMS
+          test -s latest.json
+          test -s SHA256SUMS
           tag="build-$BUILD-$ATTEMPT"
           notes="$(mktemp)"
           cat > "$notes" <<EOF
@@ -148,7 +148,9 @@ jobs:
           - Windows x64: EXE and MSI installers.
           - SHA256SUMS contains checksums for the downloads.
 
-          Installers are unsigned; macOS builds are not notarized. Automatic in-app updates are not enabled for these builds.
+          Automatic updates are available for macOS, Windows, and the Linux AppImage. Update packages are signed and bound to their release version. Save work and finish terminal commands before installing from the app.
+
+          macOS app bundles use ad-hoc signing and are not notarized; Windows installers do not have Authenticode signing. DEB/RPM users should install the matching package manually.
           EOF
           mapfile -d '' assets < <(find . -maxdepth 1 -type f -print0)
           head="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha)"

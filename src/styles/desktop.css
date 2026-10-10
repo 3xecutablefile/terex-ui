@@ -63,8 +63,8 @@
 .terex-topline.has-native-controls { padding-left:76px; }
 .terex-topline strong { color:var(--terex-bright); font-size:11px; letter-spacing:.16em; }
 .terex-topline-subtitle { color:var(--terex-dim); }
-.terex-topline nav { display:flex; align-items:center; gap:3px; margin-left:auto; }
-.terex-topline nav button { min-height:26px; padding:0 9px; }
+.terex-topline nav { display:flex; align-items:center; gap:3px; margin-left:auto;min-width:0;overflow-x:auto;scrollbar-width:none; }
+.terex-topline nav button { min-height:26px; padding:0 9px;flex-shrink:0;white-space:nowrap; }
 .terex-topline nav button:hover, .terex-topline nav button[aria-pressed=true] { background:var(--accent); color:var(--accent-foreground); }
 .terex-native-status { display:flex; align-items:center; gap:6px; font-size:8px; white-space:nowrap; }
 .terex-native-status i { width:4px; height:4px; background:var(--ring); box-shadow:0 0 5px var(--ring); }
@@ -94,6 +94,9 @@
 .terex-processes th { font-weight:400; color:var(--terex-dim); }
 .terex-processes th:first-child { width:27%; }.terex-processes th:last-child { width:27%;text-align:right; }
 .terex-processes td { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.65; }.terex-processes td:last-child{text-align:right;}
+.terex-processes tr:hover{background:var(--muted);}.terex-processes tr:focus-visible{outline:1px solid var(--ring);}
+.terex-suspended{min-height:0;max-height:130px;overflow:auto;margin-top:6px;}.terex-suspended>div:not(.terex-rule){display:flex;align-items:center;justify-content:space-between;gap:5px;font-size:8px;}.terex-suspended span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.terex-suspended button{font-size:8px;padding:3px;color:var(--ring);}
+.terex-system-rail{overflow-y:auto;scrollbar-width:thin;}
 .terex-network-rail>.terex-rule:first-child { margin-bottom:22px; }
 .terex-network-status { margin:0 0 12px; font-size:9px; }
 .terex-network-status>div { display:flex;justify-content:space-between;gap:5px; }
@@ -114,6 +117,17 @@
 .terex-browser-tabs button.selected { color:var(--primary-foreground);background:var(--primary);border-color:var(--ring);font-weight:700; }
 .terex-browser-tabs button:hover { color:var(--accent-foreground);background:var(--accent); }.terex-browser-tabs button.selected:hover{color:var(--primary-foreground);background:var(--terex-bright);}
 .terex-commander { display:flex;flex-direction:column;min-height:0;flex:1; }
+.terex-files-content{display:flex;flex-direction:column;min-height:0;flex:1;}
+.terex-shell-prompt{display:inline-flex;align-items:center;flex-shrink:0;min-width:0;max-width:45%;height:1.6em;line-height:1.6;user-select:none;}
+.terex-shell-prompt>span{display:flex;align-items:center;gap:.45em;height:100%;padding:0 1.1em 0 .9em;background:var(--primary);color:var(--primary-foreground);clip-path:polygon(0 0,calc(100% - .65em) 0,100% 50%,calc(100% - .65em) 100%,0 100%,.65em 50%);}
+.terex-shell-prompt>.terex-prompt-os{flex-shrink:0;background:var(--foreground);color:var(--background);margin-right:-.65em;z-index:1;clip-path:polygon(.5em 0,calc(100% - .65em) 0,100% 50%,calc(100% - .65em) 100%,.5em 100%,0 50%);}
+.terex-shell-prompt>.terex-prompt-path{min-width:0;padding-left:1.25em;}
+.terex-prompt-path>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.terex-shell-prompt svg{width:1em;height:1em;flex-shrink:0;}
+.cm-ghost::after{content:"  · Shift accept / RShift run";font-size:9px;opacity:.7;}
+.terex-pathline input{width:100%;min-width:0;background:transparent;color:var(--foreground);outline:none;}
+.terex-pathline input:focus{box-shadow:inset 0 -1px var(--ring);}
+.terex-file-row:focus-visible{outline:2px solid var(--ring);outline-offset:-2px;}
 .terex-pathline { min-height:26px;display:flex;align-items:center;gap:8px;padding:0 8px;color:var(--terex-bright);font-size:11px;border-bottom:1px solid var(--terex-line); }
 .terex-pathline>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}.terex-path-user{color:var(--terex-blue);font-weight:700;}.terex-pathline button{margin-left:auto;padding:0 5px;font-size:17px;}
 .terex-columns { display:grid; grid-template-columns:25% 29% 46%; flex:1;min-height:0; padding:8px 6px 0; }
@@ -144,6 +158,8 @@
 .terex-error{color:#e99a90;font-size:10px;padding:6px;overflow-wrap:anywhere;}
 .terex-native-header{padding-left:5px!important;height:32px!important;gap:3px!important;}.terex-native-header button{border-radius:0!important;}.terex-workspace .terax-pane{border:0;box-shadow:none;border-radius:0;}.terex-workspace [role=tab]{border-radius:0;}.terex-workspace-content>main>div{padding:0;}
 .terex-desktop.is-zen {padding:0;}.terex-desktop.is-zen .terex-topline{display:none;}.terex-desktop.is-zen .terex-top-deck{display:flex;}.terex-desktop.is-zen .terex-workspace{flex:1;margin:0;border:0;}
+.terex-desktop.is-zen .terex-topline.has-custom-controls{display:flex;justify-content:flex-end;border:0;}
+.terex-desktop.is-zen .terex-topline.has-custom-controls>nav,.terex-desktop.is-zen .terex-topline.has-custom-controls>strong{display:none;}
 @media(min-width:1800px){.terex-file-row{font-size:13px;min-height:23px;}.terex-processes{font-size:10px;}.terex-rule{font-size:11px;min-height:23px;}.terex-rule span:last-child{font-size:9px;}.terex-tiles{grid-template-columns:repeat(auto-fill,minmax(94px,1fr));grid-auto-rows:85px;}.terex-tile svg{width:39px;height:39px;}.terex-tile>span:last-child{font-size:10px;}}
 @media(max-width:1100px){.terex-desktop{padding:0 7px;--rail-width:145px;}.terex-top-deck{gap:8px;}.terex-topline-subtitle,.terex-native-status{display:none;}.terex-topline{gap:8px;}.terex-bottom-deck{gap:12px;}.terex-rule{font-size:8px;}.terex-file-row{font-size:10px;}.terex-file-size{display:none;}.terex-key-wide{font-size:8px;}.terex-tiles{grid-template-columns:repeat(auto-fill,minmax(62px,1fr));}.terex-file-tools{font-size:7px;gap:4px;}}
 @media(max-width:850px){.terex-desktop{--rail-width:15.6vw;}.terex-top-deck{gap:8px;}.terex-topline nav button{padding:0 5px;font-size:8px;}.terex-topline strong{font-size:9px;}.terex-file-tools button:nth-child(3){display:none;}.terex-file-row{font-size:8px;min-height:14px;gap:3px;}.terex-columns{grid-template-columns:25% 30% 45%;padding:4px 3px 0;}.terex-pathline{font-size:8px;min-height:20px;}.terex-rule{font-size:7px;}.terex-rule span:last-child{font-size:6px;}.terex-machine-summary dd,.terex-network-status{font-size:7px;}.terex-hardware{font-size:6px;}.terex-clock{font-size:22px;}.terex-date{font-size:6px;}.terex-browser-tabs button{font-size:8px;}.terex-footer{font-size:7px;gap:8px;}}

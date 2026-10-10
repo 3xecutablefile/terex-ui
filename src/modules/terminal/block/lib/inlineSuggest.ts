@@ -18,7 +18,9 @@ const suggestionField = StateField.define<string>({
     if (tr.docChanged) {
       if (!value) return value;
       const doc = tr.state.doc.toString();
-      return doc.length > 0 && value.startsWith(doc) && value.length > doc.length
+      return doc.length > 0 &&
+        value.startsWith(doc) &&
+        value.length > doc.length
         ? value
         : "";
     }
@@ -80,21 +82,50 @@ export function acceptInlineSuggestion(view: EditorView): boolean {
   return true;
 }
 
-function fetcherPlugin(fetch: (line: string) => Promise<string | null>) {
+export function hasInlineSuggestion(view: EditorView): boolean {
+  return tail(view.state) !== null;
+}
+
+function fetcherPlugin(
+  fetch: (line: string, signal?: AbortSignal) => Promise<string | null>,
+) {
   return ViewPlugin.fromClass(
     class {
       private timer: ReturnType<typeof setTimeout> | null = null;
+      private controller: AbortController | null = null;
+      private alive = true;
       update(update: ViewUpdate) {
+        if (update.state.readOnly) {
+          this.controller?.abort();
+          if (this.timer) clearTimeout(this.timer);
+          return;
+        }
         if (!update.docChanged) return;
+        this.controller?.abort();
         if (this.timer) clearTimeout(this.timer);
         const view = update.view;
         const line = view.state.doc.toString();
-        if (!line) return;
+        if (
+          !line ||
+          view.state.readOnly ||
+          !view.hasFocus ||
+          !update.transactions.some(
+            (t) => t.isUserEvent("input") || t.isUserEvent("delete"),
+          )
+        )
+          return;
         this.timer = setTimeout(() => {
           if (view.state.doc.toString() !== line) return;
-          fetch(line)
+          const controller = new AbortController();
+          this.controller = controller;
+          fetch(line, controller.signal)
             .then((sugg) => {
-              if (sugg && view.state.doc.toString() === line) {
+              if (
+                this.alive &&
+                !controller.signal.aborted &&
+                sugg &&
+                view.state.doc.toString() === line
+              ) {
                 view.dispatch({ effects: setSuggestion.of(sugg) });
               }
             })
@@ -102,13 +133,17 @@ function fetcherPlugin(fetch: (line: string) => Promise<string | null>) {
         }, 70);
       }
       destroy() {
+        this.alive = false;
+        this.controller?.abort();
         if (this.timer) clearTimeout(this.timer);
       }
     },
   );
 }
 
-export function inlineSuggestion(fetch: (line: string) => Promise<string | null>) {
+export function inlineSuggestion(
+  fetch: (line: string, signal?: AbortSignal) => Promise<string | null>,
+) {
   return [
     suggestionField,
     ghostDecorations,

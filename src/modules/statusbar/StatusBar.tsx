@@ -5,10 +5,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useChatStore } from "@/modules/ai";
 import { AgentStatusPill } from "@/modules/ai/components/AgentStatusPill";
-import {
-  AiOpenButton,
-  AiStatusBarControls,
-} from "@/modules/ai/components/AiStatusBarControls";
+import { AiStatusBarControls } from "@/modules/ai/components/AiStatusBarControls";
 import { LspStatusPill } from "@/modules/lsp";
 import type { WorkspaceEnv } from "@/modules/workspace";
 import { IncognitoIcon } from "@hugeicons/core-free-icons";
@@ -24,8 +21,6 @@ type Props = {
   onCd: (path: string) => void;
   onWorkspaceChange: (env: WorkspaceEnv) => void;
   onOpenMini: () => void;
-  /** Opens the panel, or Settings > Models when no API key is loaded. */
-  onOpenAi: () => void;
   /** Only rendered when the AI panel is open and a key is loaded. */
   hasComposer: boolean;
   privateActive: boolean;
@@ -38,7 +33,6 @@ export function StatusBar({
   onCd,
   onWorkspaceChange,
   onOpenMini,
-  onOpenAi,
   hasComposer,
   privateActive,
 }: Props) {
@@ -71,11 +65,7 @@ export function StatusBar({
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         <AgentStatusPill onClick={onOpenMini} />
-        {panelOpen && hasComposer ? (
-          <AiStatusBarControls />
-        ) : (
-          <AiOpenButton onOpen={onOpenAi} />
-        )}
+        {panelOpen && hasComposer && <AiStatusBarControls />}
       </div>
     </footer>
   );

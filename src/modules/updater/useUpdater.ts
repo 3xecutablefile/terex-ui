@@ -1,154 +1,188 @@
-import { getVersion } from "@tauri-apps/api/app";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { listen, emitTo } from "@tauri-apps/api/event";
+import { Window } from "@tauri-apps/api/window";
 import { relaunch } from "@tauri-apps/plugin-process";
 import { check, type Update } from "@tauri-apps/plugin-updater";
-import { useCallback, useEffect, useState } from "react";
-import { IS_LINUX } from "@/lib/platform";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { subscribeWindowPresentation } from "@/modules/terminal/ghostty/windowPresentation";
 
-const LAST_CHECK_KEY = "terax:updater:last-check";
-const CHECK_INTERVAL_MS = 30 * 60 * 1000;
-const GITHUB_LATEST_RELEASE =
-  "https://api.github.com/repos/3xecutablefile/terex-ui/releases/latest";
-
-export interface ManualUpdateInfo {
-  version: string;
-  currentVersion: string;
-  body: string;
-  releaseUrl: string;
-}
+const CHECK_EVENT = "terex:updater:check";
+const LAST_CHECK = "terex:updater:last-check";
+const INTERVAL = 30 * 60 * 1000;
 
 export type UpdaterStatus =
-  | { kind: "idle" }
-  | { kind: "checking" }
-  | { kind: "uptodate" }
-  | { kind: "available"; update: Update }
-  | { kind: "manual-available"; info: ManualUpdateInfo }
-  | { kind: "downloading"; downloaded: number; contentLength: number | null }
-  | { kind: "ready" }
+  | { kind: "idle" | "checking" | "uptodate" | "manual" | "installing" }
+  | {
+      kind: "downloading";
+      version: string;
+      downloaded: number;
+      contentLength: number | null;
+    }
+  | { kind: "ready"; version: string; body?: string }
   | { kind: "error"; message: string };
 
-function parseVersion(v: string): number[] {
-  return v
-    .replace(/^v/, "")
-    .split("-")[0]
-    .split(".")
-    .map((p) => Number.parseInt(p, 10) || 0);
+export async function requestUpdateCheck(): Promise<void> {
+  await emitTo("main", CHECK_EVENT);
+  const main = await Window.getByLabel("main");
+  await main?.show();
+  await main?.setFocus();
 }
 
-function isNewer(remote: string, current: string): boolean {
-  const a = parseVersion(remote);
-  const b = parseVersion(current);
-  const len = Math.max(a.length, b.length);
-  for (let i = 0; i < len; i++) {
-    const x = a[i] ?? 0;
-    const y = b[i] ?? 0;
-    if (x !== y) return x > y;
-  }
-  return false;
-}
-
-async function checkLinuxRelease(): Promise<ManualUpdateInfo | null> {
-  const [current, res] = await Promise.all([
-    getVersion(),
-    fetch(GITHUB_LATEST_RELEASE, {
-      headers: { Accept: "application/vnd.github+json" },
-    }),
-  ]);
-  if (!res.ok) {
-    throw new Error(`GitHub API ${res.status}`);
-  }
-  const data = (await res.json()) as {
-    tag_name: string;
-    body?: string;
-    html_url: string;
-  };
-  const remote = data.tag_name.replace(/^v/, "");
-  if (!isNewer(remote, current)) return null;
-  return {
-    version: remote,
-    currentVersion: current,
-    body: data.body ?? "",
-    releaseUrl: data.html_url,
-  };
-}
-
-interface Options {
-  /** Skip the time-based throttle on automatic startup checks. */
-  manual?: boolean;
-}
-
-interface HookOptions {
-  /** When false, the hook does not run an automatic check on mount. */
-  autoCheck?: boolean;
-}
-
-export function useUpdater({ autoCheck = false }: HookOptions = {}) {
+export function useUpdater() {
   const [status, setStatus] = useState<UpdaterStatus>({ kind: "idle" });
+  const [open, setOpen] = useState(false);
+  const update = useRef<Update | null>(null);
+  const busy = useRef(false);
+  const alive = useRef(true);
+  const supported = useRef<Promise<boolean> | null>(null);
 
-  const runCheck = useCallback(async ({ manual }: Options = {}) => {
-    if (!manual) {
-      const last = Number(localStorage.getItem(LAST_CHECK_KEY) ?? 0);
-      if (Date.now() - last < CHECK_INTERVAL_MS) return;
-    }
-    setStatus({ kind: "checking" });
-    try {
-      if (IS_LINUX) {
-        const info = await checkLinuxRelease();
-        if (info) {
-          setStatus({ kind: "manual-available", info });
-        } else {
-          localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
-          setStatus({ kind: "uptodate" });
-        }
+  const runCheck = useCallback(
+    async ({ manual = false }: { manual?: boolean } = {}) => {
+      if (manual) setOpen(true);
+      if (busy.current) return;
+      if (update.current) {
+        if (manual)
+          setStatus({
+            kind: "ready",
+            version: update.current.version,
+            body: update.current.body,
+          });
         return;
       }
-      const update = await check();
-      if (update) {
-        setStatus({ kind: "available", update });
-      } else {
-        localStorage.setItem(LAST_CHECK_KEY, String(Date.now()));
-        setStatus({ kind: "uptodate" });
-      }
-    } catch (err) {
-      setStatus({ kind: "error", message: String(err) });
-    }
-  }, []);
-
-  const install = useCallback(async () => {
-    if (status.kind !== "available") return;
-    const { update } = status;
-    let total: number | null = null;
-    let downloaded = 0;
-    setStatus({ kind: "downloading", downloaded: 0, contentLength: null });
-    try {
-      await update.downloadAndInstall((event) => {
-        if (event.event === "Started") {
-          total = event.data.contentLength ?? null;
-          setStatus({
-            kind: "downloading",
-            downloaded: 0,
-            contentLength: total,
-          });
-        } else if (event.event === "Progress") {
-          downloaded += event.data.chunkLength;
-          setStatus({ kind: "downloading", downloaded, contentLength: total });
-        } else if (event.event === "Finished") {
-          setStatus({ kind: "ready" });
+      if (!manual) {
+        try {
+          const elapsed = Date.now() - Number(localStorage.getItem(LAST_CHECK));
+          if (elapsed >= 0 && elapsed < INTERVAL) return;
+        } catch {
+          /* Storage may be disabled. */
         }
-      });
-      await relaunch();
-    } catch (err) {
-      setStatus({ kind: "error", message: String(err) });
-    }
-  }, [status]);
+      }
+      busy.current = true;
+      setStatus({ kind: "checking" });
+      try {
+        supported.current ??= invoke<boolean>("updater_supported");
+        if (!(await supported.current)) {
+          if (alive.current) setStatus({ kind: "manual" });
+          return;
+        }
+        try {
+          localStorage.setItem(LAST_CHECK, String(Date.now()));
+        } catch {
+          /* Checking does not require storage. */
+        }
+        const candidate = await check({ timeout: 20_000 });
+        if (!alive.current) {
+          await candidate?.close();
+          return;
+        }
+        if (!candidate) {
+          setStatus({ kind: "uptodate" });
+          return;
+        }
+        update.current = candidate;
+        let downloaded = 0,
+          total: number | null = null,
+          lastProgress = 0;
+        setStatus({
+          kind: "downloading",
+          version: candidate.version,
+          downloaded,
+          contentLength: total,
+        });
+        await candidate.download(
+          (event) => {
+            if (event.event === "Started")
+              total = event.data.contentLength ?? null;
+            if (event.event === "Progress")
+              downloaded += event.data.chunkLength;
+            if (alive.current && Date.now() - lastProgress >= 100) {
+              lastProgress = Date.now();
+              setStatus({
+                kind: "downloading",
+                version: candidate.version,
+                downloaded,
+                contentLength: total,
+              });
+            }
+          },
+          { timeout: 300_000 },
+        );
+        // download() resolves only after native signature and signed-version verification.
+        if (alive.current) {
+          setStatus({
+            kind: "ready",
+            version: candidate.version,
+            body: candidate.body,
+          });
+          if (!manual)
+            toast.info(`Terex UI ${candidate.version} is ready`, {
+              duration: 15000,
+              action: { label: "Review update", onClick: () => setOpen(true) },
+            });
+        }
+      } catch (error) {
+        await update.current?.close().catch(() => {});
+        update.current = null;
+        supported.current = null;
+        if (alive.current) setStatus({ kind: "error", message: String(error) });
+      } finally {
+        busy.current = false;
+      }
+    },
+    [],
+  );
 
-  const dismiss = useCallback(() => {
-    setStatus({ kind: "idle" });
-  }, []);
+  const install = useCallback(
+    async (beforeInstall: () => Promise<void>) => {
+      if (status.kind !== "ready" || !update.current || busy.current) return;
+      busy.current = true;
+      try {
+        await beforeInstall();
+        if (!alive.current) return;
+        setStatus({ kind: "installing" });
+        await update.current.install();
+        await relaunch();
+      } catch (error) {
+        if (alive.current) setStatus({ kind: "error", message: String(error) });
+      } finally {
+        busy.current = false;
+      }
+    },
+    [status.kind],
+  );
 
   useEffect(() => {
-    if (!autoCheck) return;
-    void runCheck();
-  }, [autoCheck, runCheck]);
+    alive.current = true;
+    const pending = listen(CHECK_EVENT, () => void runCheck({ manual: true }));
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let visible = false;
+    const tick = async () => {
+      await runCheck();
+      if (alive.current && visible) timer = setTimeout(tick, INTERVAL);
+    };
+    const off =
+      !import.meta.env.DEV && isTauri()
+        ? subscribeWindowPresentation((state) => {
+            visible = state.visible;
+            clearTimeout(timer);
+            if (visible) timer = setTimeout(tick, 10_000);
+          })
+        : () => {};
+    return () => {
+      alive.current = false;
+      off();
+      clearTimeout(timer);
+      void pending.then((unlisten) => unlisten());
+      void update.current?.close().catch(() => {});
+    };
+  }, [runCheck]);
 
-  return { status, check: runCheck, install, dismiss };
+  return {
+    status,
+    open,
+    check: runCheck,
+    install,
+    dismiss: () => setOpen(false),
+  };
 }

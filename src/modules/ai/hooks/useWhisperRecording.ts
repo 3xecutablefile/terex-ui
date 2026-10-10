@@ -4,6 +4,7 @@ import { useChatStore } from "../store/chatStore";
 import { usePreferencesStore } from "@/modules/settings/preferences";
 import { transcribeAudio, type SttOptions } from "../lib/stt";
 import type { SttProvider } from "../config";
+import { getKey } from "../lib/keyring";
 
 const MIME_CANDIDATES = [
   "audio/webm;codecs=opus",
@@ -33,7 +34,7 @@ function getApiKeyForStt(
   return null;
 }
 
-type State = "idle" | "recording" | "transcribing";
+type State = "idle" | "preparing" | "recording" | "transcribing";
 
 export function useWhisperRecording({
   onResult,
@@ -50,8 +51,6 @@ export function useWhisperRecording({
   const streamRef = useRef<MediaStream | null>(null);
 
   const needsKey = providerNeedsKey(sttProvider);
-  const providerKey = needsKey ? getApiKeyForStt(apiKeys, sttProvider) : null;
-  const hasKey = needsKey ? !!providerKey : true;
 
   const supported =
     typeof navigator !== "undefined" &&
@@ -74,8 +73,17 @@ export function useWhisperRecording({
   }, []);
 
   const start = useCallback(async () => {
-    if (!supported || !hasKey || state !== "idle") return;
+    if (!supported || state !== "idle") return;
+    setState("preparing");
     try {
+      let keys = apiKeys;
+      if (needsKey && !getApiKeyForStt(keys, sttProvider)) {
+        const provider = sttProvider === "groq" ? "groq" : "openai";
+        const key = await getKey(provider);
+        if (!key) throw new Error(`Configure or authorize the ${provider} voice key in Settings.`);
+        keys = { ...keys, [provider]: key };
+        useChatStore.getState().setApiKey(provider, key);
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       const mimeType = pickMime();
@@ -96,7 +104,7 @@ export function useWhisperRecording({
         }
         setState("transcribing");
         try {
-          const text = await transcribeAudio(blob, sttProvider, apiKeys, sttOptions);
+          const text = await transcribeAudio(blob, sttProvider, keys, sttOptions);
           if (text.trim()) onResult(text.trim());
         } catch (e) {
           console.error("stt.transcribe", e);
@@ -110,11 +118,11 @@ export function useWhisperRecording({
       setState("recording");
     } catch (e) {
       console.error("stt.getUserMedia", e);
-      toast.error("Microphone access failed");
+      toast.error(e instanceof Error ? e.message : "Microphone access failed");
       teardownStream();
       setState("idle");
     }
-  }, [apiKeys, sttProvider, sttOptions, onResult, state, supported, hasKey]);
+  }, [apiKeys, sttProvider, sttOptions, onResult, state, supported, needsKey]);
 
   useEffect(() => {
     return () => {
@@ -126,11 +134,10 @@ export function useWhisperRecording({
   return {
     state,
     recording: state === "recording",
-    transcribing: state === "transcribing",
+    transcribing: state === "transcribing" || state === "preparing",
     start,
     stop,
     supported,
-    hasKey,
     sttProvider,
   };
 }
