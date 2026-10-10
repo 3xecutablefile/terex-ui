@@ -99,7 +99,10 @@ fn platform_layout()->Result<KeyboardLayout,String>{
         for &(code,_,scan) in KEYS{
             let mut values=Vec::new();let mut dead=Vec::new();
             for mask in 0..8{
-                let mut state=[0u8;256];if mask&1!=0{state[VK_SHIFT as usize]=128;}if mask&2!=0{state[VK_CAPITAL as usize]=1;}if mask&4!=0{state[VK_CONTROL as usize]=128;state[VK_MENU as usize]=128;state[VK_RMENU as usize]=128;}
+                let mut state=[0u8;256];
+                if mask&1!=0{state[VK_SHIFT as usize]=128;}
+                if mask&2!=0{state[VK_CAPITAL as usize]=1;}
+                if mask&4!=0{state[VK_CONTROL as usize]=128;state[VK_MENU as usize]=128;state[VK_RMENU as usize]=128;}
                 let mut chars=[0u16;8];let len=ToUnicodeEx(MapVirtualKeyExW(scan,MAPVK_VSC_TO_VK_EX,layout),scan,state.as_ptr(),chars.as_mut_ptr(),8,4,layout);
                 values.push(String::from_utf16_lossy(&chars[..len.unsigned_abs().min(8) as usize]));dead.push(len<0);
             }
@@ -123,7 +126,10 @@ fn platform_layout()->Result<KeyboardLayout,String>{
     for &(code,_,scan) in KEYS{
         let mut values=Vec::new();let mut dead=Vec::new();
         for mask in 0..8{
-            let mut modifiers=ModifierType::empty();if mask&1!=0{modifiers|=ModifierType::SHIFT_MASK;}if mask&2!=0{modifiers|=ModifierType::LOCK_MASK;}if mask&4!=0{modifiers|=ModifierType::MOD5_MASK;}
+            let mut modifiers=ModifierType::empty();
+            if mask&1!=0{modifiers|=ModifierType::SHIFT_MASK;}
+            if mask&2!=0{modifiers|=ModifierType::LOCK_MASK;}
+            if mask&4!=0{modifiers|=ModifierType::MOD5_MASK;}
             let key=map.translate_keyboard_state(scan+8,modifiers,group).map(|(key,_,_,_)|key).unwrap_or(0);
             let is_dead=(0xfe50..=0xfe6f).contains(&key);
             let text=if is_dead{["`","´","^","~","¯","˘","˙","¨","˚","˝","ˇ","¸","˛"].get((key-0xfe50) as usize).unwrap_or(&"").to_string()}else{gtk::gdk::keys::Key::from(key).to_unicode().map(|c|c.to_string()).unwrap_or_default()};
