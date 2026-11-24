@@ -1,16 +1,6 @@
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use tauri::Manager;
-
-const TERAX_ID: &str = "app.crynta.terax";
-
-fn legacy_data_directory(current: &Path) -> Option<PathBuf> {
-    let legacy = current.with_file_name(TERAX_ID);
-    legacy
-        .join("terax-settings.json")
-        .is_file()
-        .then_some(legacy)
-}
 
 #[derive(Serialize)]
 pub struct SharedStoragePaths {
@@ -24,17 +14,10 @@ pub fn storage_paths(app: &tauri::AppHandle) -> Result<SharedStoragePaths, Strin
     let data = paths.app_data_dir().map_err(|e| e.to_string())?;
     let config = paths.app_config_dir().map_err(|e| e.to_string())?;
     let local_data = paths.app_local_data_dir().map_err(|e| e.to_string())?;
-    Ok(match legacy_data_directory(&data) {
-        Some(data) => SharedStoragePaths {
-            data,
-            config: config.with_file_name(TERAX_ID),
-            local_data: local_data.with_file_name(TERAX_ID),
-        },
-        None => SharedStoragePaths {
-            data,
-            config,
-            local_data,
-        },
+    Ok(SharedStoragePaths {
+        data,
+        config,
+        local_data,
     })
 }
 
@@ -48,24 +31,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn existing_terax_store_is_shared_without_copying_or_overwriting() {
+    fn terex_and_terax_profiles_do_not_share_data_paths() {
         let root = tempfile::tempdir().unwrap();
-        let current = root.path().join("io.github.3xecutablefile.terex-ui");
-        let old = root.path().join(TERAX_ID);
-        std::fs::create_dir_all(&current).unwrap();
-        std::fs::write(current.join("terax-settings.json"), "new-app-data").unwrap();
-        assert!(legacy_data_directory(&current).is_none());
-        std::fs::create_dir_all(&old).unwrap();
-        assert!(legacy_data_directory(&current).is_none());
-        std::fs::write(old.join("terax-settings.json"), "original-data").unwrap();
-        assert_eq!(legacy_data_directory(&current), Some(old.clone()));
+        let terex = root.path().join("io.github.3xecutablefile.terex-ui");
+        let terax = root.path().join("app.crynta.terax");
+        std::fs::create_dir_all(&terex).unwrap();
+        std::fs::create_dir_all(&terax).unwrap();
+        std::fs::write(terex.join("terex-settings.json"), "terex").unwrap();
+        std::fs::write(terax.join("terax-settings.json"), "terax").unwrap();
+
+        assert_ne!(terex, terax);
         assert_eq!(
-            std::fs::read_to_string(old.join("terax-settings.json")).unwrap(),
-            "original-data"
+            std::fs::read_to_string(terex.join("terex-settings.json")).unwrap(),
+            "terex"
         );
         assert_eq!(
-            std::fs::read_to_string(current.join("terax-settings.json")).unwrap(),
-            "new-app-data"
+            std::fs::read_to_string(terax.join("terax-settings.json")).unwrap(),
+            "terax"
         );
     }
 }
